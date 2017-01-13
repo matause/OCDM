@@ -1,0 +1,209 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+}
+
+namespace MM
+{
+    namespace GFX
+    {
+        class TextureUnit;
+    }
+}
+
+#include "game/game.hpp"
+#include "grafx/texmgr.hpp"
+
+using MM::Game;
+using MM::GFX::TextureUnit;
+#end
+
+namespace MM
+{
+    namespace GFX
+    {
+        class FontManager
+        {
+        private:
+            TextureUnit* tex;
+            u16 tox[256];
+            u16 toy[256];
+            
+            FontManager() : w(0), h(0), tex(nullptr)
+            {
+                
+            }
+            
+        public:
+            u8 w;
+            u8 h;
+            
+            static u32 defaultcolor = 0xFF000000;
+            
+            int CalcWidth(char* str)
+            {
+                return CalcWidthN(str, strlen(str));
+            }
+            
+            int CalcWidthN(char* str, int len)
+            {
+                if(len <= 0) return 0;
+                
+                int i = len;
+                int acc = 0;
+                while(i--)
+                {
+                    acc += w;
+                }
+                
+                return acc;
+            }
+            
+            int RenderStringR(s16 x, s16 y, char* c, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
+            {
+                return RenderStringRNS(x, y, SCREENW, SCREENH, c, strlen(c), intensity, a, rng, col);
+            }
+            
+            int RenderStringRNS(s16 sx, s16 sy, s16 ex, s16 ey, char* c, int len, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
+            {
+                if(sx >= ex || sy >= ey || len <= 0) return 0;
+                
+                if(!rng) rng = Game::rand(Game::i->tick >> 2);
+                
+                int i = 0;
+                int cw = 0;
+                s16 x = sx;
+                s16 y = sy;
+                
+                while(y < ey)
+                {
+                    while(x < ex)
+                    {
+                        if(i == len) return cw;
+                        if(*c == '\n')
+                        {
+                            c++; break;
+                        }
+                        int ret = RenderCharR(x, y, *(c++), intensity, a, rng, col);
+                        cw += ret;
+                        x += ret;
+                        rng = Game::rand(rng);
+                        
+                        i++;
+                    }
+                    
+                    x = sx;
+                    y += h;
+                }
+                
+                return cw;
+            }
+            
+            int RenderString(s16 x, s16 y, char* c, u8 a = 0xFF, u32 col = defaultcolor)
+            {
+                return RenderStringNS(x, y, SCREENW, SCREENH, c, strlen(c), a, col);
+            }
+            
+            int RenderStringNS(s16 sx, s16 sy, s16 ex, s16 ey, char* c, int len, u8 a = 0xFF, u32 col = defaultcolor)
+            {
+                if(sx >= ex || sy >= ey || len <= 0) return 0;
+                
+                int i = 0;
+                int cw = 0;
+                s16 x = sx;
+                s16 y = sy;
+                
+                while(y < ey)
+                {
+                    while(x < ex)
+                    {
+                        if(i == len) return cw;
+                        if(*c == '\n')
+                        {
+                            c++; break;
+                        }
+                        int ret = RenderChar(x, y, *(c++), a, col);
+                        cw += ret;
+                        x += ret;
+                        
+                        i++;
+                    }
+                    
+                    x = sx;
+                    y += h;
+                }
+                
+                return cw;
+            }
+            
+            int RenderCharR(s16 x, s16 y, char c, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
+            {
+                if(!rng) rng = Game::rand(Game::i->tick >> 2);;
+                
+                return RenderChar(x + (rng % intensity), y + (Game::rand(rng) % intensity), c, a, col);
+            }
+            
+            int RenderChar(s16 x, s16 y, char c, u8 a = 0xFF, u32 col = defaultcolor)
+            {
+                gfxw_drawiconpc(tex->operator [](Game::i->tick), x, y, tox[(u8)c], toy[(u8)c], w, h, col | (a << 24));
+                
+                return w;
+            }
+            
+            static int LoadFont(char* fnt, FontManager** out)
+            {
+                if(!out) return 1;
+                
+                char buf[262];
+                sprintf(buf, "font/%s.bin", fnt);
+                FILE* f = fopen(Game::i->Resolve(RESTYPE::RES_GENERAL, buf), "rb");
+                if(f <= 0) return -1;
+                
+                FontManager* fm = new FontManager;
+                fread(&fm->w, 1, 1, f);
+                fread(&fm->h, 1, 1, f);
+                fclose(f);
+                
+                sprintf(buf, "font/%s", fnt);
+                if(!(fm->tex = Game::i->texmgr->LoadTexture(buf)) && !(fm->tex = Game::i->texmgr->LoadAnimation(buf)))
+                {
+                    printf("[FONT] No texture sheet found for '%s'\n", fnt);
+                    return -2;
+                }
+                
+                printf("[FONT] Size: %ix%i\n", fm->w, fm->h);
+                
+                u8 i = 0;
+                u8 incx = fm->w;
+                u8 incy = fm->h;
+                u16 iterx = 0;
+                u16 itery = 0;
+                u16 tw = fm->tex->operator [](0)->w;
+                u16 th = fm->tex->operator [](0)->h;
+                
+                TextureUnit* tex = nullptr;
+                do
+                {
+                    if((iterx + incx) > tw)
+                    {
+                        iterx = 0;
+                        itery += incy;
+                    }
+                    
+                    fm->tox[i] = iterx;
+                    fm->toy[i] = itery;
+                    
+                    iterx += incx;
+                }
+                while(++i);
+                
+                *out = fm;
+                
+                return 0;
+            }
+        };
+    }
+}

@@ -1,0 +1,45 @@
+#hdr
+#include <3ds.h>
+#end
+
+namespace MM
+{
+    namespace GAME
+    {
+        class Menu
+        {
+        public:
+            Menu* parent;
+            
+            virtual int Update()
+            {
+                return 0;
+            }
+            
+            virtual void Render()
+            {
+                
+            }
+            
+            virtual void RenderOverlay()
+            {
+                
+            }
+            
+            virtual void OnActive()
+            {
+                
+            }
+            
+            virtual void OnDeactive()
+            {
+                
+            }
+            
+            virtual ~Menu()
+            {
+                
+            }
+        };
+    }
+}

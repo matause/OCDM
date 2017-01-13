@@ -1,0 +1,167 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+
+#include "leveltools.h"
+}
+
+#include "game/game.hpp"
+
+#include "game/menu/gui/GUIElement.hpp"
+#include "game/menu/gui/GUIContainer.hpp"
+
+using MM::Game;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::GUIElement;
+using MM::GAME::MENU::GUIContainer;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            namespace SHIT
+            {
+                template<typename T>
+                class ShitCourseButton : public GUIElement
+                {
+                public:
+                    typedef void (*ClickHandlerFunc)(T* wat, ShitCourseButton* dis, s16 x, s16 y);
+                    
+                    ClickHandlerFunc clickhandler;
+                    LevelEntry* le;
+                    T* wat;
+                    
+                    
+                    ShitCourseButton(s16 x, s16 y, u16 w, u16 h, ClickHandlerFunc clickhandler, LevelEntry* lv, T* wat) : GUIElement(x, y, w, h), clickhandler(clickhandler), le(lv), wat(wat)
+                    {
+                        
+                    }
+                    
+                    virtual void Render(s16 rx, s16 ry)
+                    {
+                        if(le)
+                        {
+                            gfxw_fillrect(rx, ry, w, h, 0xFF423607);
+                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->lvlname) >> 1), ry, le->lvlname, 0xFF, 0xA1A193);
+                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->miin) >> 1), ry + h - Game::i->mono8->h, le->miin, 0xFF, 0xA1A193);
+                        }
+                        else
+                        {
+                            gfxw_drawrect(rx, ry, w, h, 0xFF423607);
+                        }
+                    }
+                    
+                    virtual void TouchStart(s16 x, s16 y)
+                    {
+                        if(le && clickhandler) clickhandler(wat, this, x, y);
+                    }
+                };
+                
+                template<typename T>
+                class ShitCourse4 : public GUIContainer
+                {
+                public:
+                    typedef void (*SlotHandlerFunc)(T* wat, ShitCourse4<T>* me, int btn, u8 which);
+                    
+                    SlotHandlerFunc slothandler;
+                    
+                    int open;
+                    
+                    LevelEntry* le;
+                    T* wat;
+                    
+                    
+                    ShitCourse4(s16 x, s16 y, u16 w, SlotHandlerFunc clickhandler, u8 s1, u8 s2, u8 s3, u8 s4, T* wat) : GUIContainer(x, y, w, 50), slothandler(clickhandler), wat(wat)
+                    {
+                        open = 0;
+                        le = nullptr;
+                        
+                        elems.Put
+                        (
+                            new ShitCourseButton<ShitCourse4>
+                            (
+                                0, 0, 80, 50, ShitButtonHandler,
+                                s1 == 0xFF ? nullptr : Game::i->slots[s1],
+                                this
+                            )
+                        );
+                        elems.Put
+                        (
+                            new ShitCourseButton<ShitCourse4>
+                            (
+                                80, 0, 80, 50, ShitButtonHandler,
+                                s1 == 0xFF ? nullptr : Game::i->slots[s2],
+                                this
+                            )
+                        );
+                        elems.Put
+                        (
+                            new ShitCourseButton<ShitCourse4>
+                            (
+                                160, 0, 80, 50, ShitButtonHandler,
+                                s1 == 0xFF ? nullptr : Game::i->slots[s3],
+                                this
+                            )
+                        );
+                        elems.Put
+                        (
+                            new ShitCourseButton<ShitCourse4>
+                            (
+                                240, 0, 80, 50, ShitButtonHandler,
+                                s1 == 0xFF ? nullptr : Game::i->slots[s4],
+                                this
+                            )
+                        );
+                    }
+                    
+                    static void ShitButtonHandler(ShitCourse4* wat, ShitCourseButton<ShitCourse4>* dis, s16 x, s16 y)
+                    {
+                        wat->open = dis->le != wat->le;
+                        wat->le = dis->le;
+                        if(!wat->open && wat->le) wat->le = nullptr;
+                        
+                        if(wat->slothandler) wat->slothandler(wat->wat, wat, 0, wat->le ? wat->le->nth : -1);
+                    }
+                    
+                    void Render(s16 offsx, s16 offsy)
+                    {
+                        GUIContainer::Render(offsx, offsy);
+                        
+                        if(le)
+                        {
+                            if(h > 70)
+                            {
+                                Game::i->mono8->RenderString(offsx + 2, offsy + 56, le->lvlname, 0xFF, 0xA1A193);
+                                
+                                if(h > 90)
+                                {
+                                    Game::i->mono8->RenderString(offsx + 2, offsy + 80, "by", 0xFF, 0xA1A193);
+                                    Game::i->mono8->RenderString(offsx + 2 + (8 * 3), offsy + 80, le->miin, 0xFF, 0xA1A193);
+                                }
+                            }
+                        }
+                    }
+                    
+                    void Tick()
+                    {
+                        if(open)
+                        {
+                            if(h < 100) h+=2;
+                        }
+                        else
+                        {
+                            if(h > 50) h-=2;
+                        }
+                    }
+                };
+            }
+        }
+    }
+}

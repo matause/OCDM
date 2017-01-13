@@ -1,0 +1,510 @@
+#hdr
+#include <3ds.h>
+
+namespace MM
+{
+    namespace GFX
+    {
+        class TextureManager;
+        class FontManager;
+    }
+    
+    /*
+    namespace SND
+    {
+        class SoundManager;
+    }
+    */
+}
+
+extern "C"
+{
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "leveltools.h"
+}
+
+#include "misc/util.hpp"
+#include "game/menu.hpp"
+#include "grafx/texmgr.hpp"
+#include "grafx/fontmgr.hpp"
+//#include "sound/sndmgr.hpp"
+#include "fs/lppfs.hpp"
+#include "shit.hpp"
+
+
+using MM::GAME::Menu;
+using MM::GFX::TextureManager;
+using MM::GFX::TextureUnit;
+using MM::GFX::FontManager;
+//using MM::SND::SoundManager;
+using MM::FS::FSSession;
+using MM::FS::FSFile;
+using MM::FS::FSDirectory;
+
+using MM::SHIT::Progress;
+
+#define FPSNO 60
+#end
+
+
+namespace MM
+{
+    class Game
+    {
+    private:
+        float fps;
+        
+    protected:
+        Game();
+        
+    public:
+        /**
+         * Game instance (always use this from external classes!)
+         */
+        static Game* i = nullptr;
+        
+        /**
+         * Keys pressed down (triggers only once)
+         * Search for KEY_* in an unnamed enum for values
+         */
+        u32& kDown;
+        /**
+         * Keys held (triggers while the held is held)
+         * Search for KEY_* in an unnamed enum for values
+         */
+        u32& kHeld;
+        /**
+         * Keys released (triggers only once)
+         * Search for KEY_* in an unnamed enum for values
+         */
+        u32& kUp;
+        /**
+         * Joystick position
+         * Values range from approx. -131 to 131 on both axes
+         */
+        circlePosition& cpos;
+        /**
+         * Last touch position in pixels
+         * Only updates while (kHeld & KEY_TOUCH) is true
+         */
+        touchPosition& touch;
+        
+        //lua_State* L;
+        
+        /**
+         * Texture manager instance
+         */
+        TextureManager* texmgr;
+        
+        /**
+         * Currently active menu (or nullptr if no menu is present)
+         */
+        Menu* menu;
+        
+        /**
+         * Global tick counter
+         */
+        u32 tick;
+        
+        /**
+         * Global font renderer
+         */
+        FontManager* mono8;
+        
+        /**
+         * Global soundmanager
+         */
+        //SoundManager* snd;
+        
+        /**
+         * SDMC FSSession
+         */
+        FSSession* sdmc;
+        
+        /**
+         * ExtData FSSession
+         */
+        FSSession* extdata;
+        
+        /**
+         * Savedata FSSession
+         */
+        FSSession* save;
+        
+        /**
+         * ExtradataID
+         */
+        u64 extid;
+        
+        /**
+         * SavedataID
+         */
+        u64 saveid;
+        
+        /**
+         * Savefile fsUSER handle
+         */
+        Handle fsu;
+        
+        /**
+         * Progress file pointer
+         */
+        Progress* prog;
+        
+        /**
+         * Level slots
+         */
+        LevelEntry* slots[221];
+        
+        
+        
+        /**
+         * Game constructor (don't use it!) 
+         */
+        Game(u32& kDown, u32& kHeld, u32& kUp, circlePosition& cpos, touchPosition& touch, u64 ext, u64 sav, Handle fsu)
+        : kDown(kDown), kHeld(kHeld), kUp(kUp), cpos(cpos), touch(touch), tick(0), mono8(nullptr), fps(0.0F), sdmc(nullptr), extdata(nullptr), save(nullptr), prog(nullptr), extid(ext), saveid(sav)
+        {
+            i = this;
+            this->fsu = fsu;
+            menu = nullptr;
+            
+            Result res = 0;
+            
+            //=====[Basic stuff start]=====
+            
+            puts("[GAME] Initializing TextureManager");
+            texmgr = new TextureManager;
+            puts("[GAME] TextureManager initialized");
+            
+            puts("[GAME] Initializing FontManager");
+            if(FontManager::LoadFont("ctru", &mono8))
+            {
+                puts("[GAME] Failed to load font");
+                throw -127;
+            }
+            puts("[GAME] FontManager initialized");
+            
+            /*
+            puts("[GAME] Initializing SoundManager");
+            snd = new SoundManager(3, 7, 5);
+            puts("[GAME] SoundManager initialized");
+            */
+            
+            puts("[GAME] Initializing SDMC");
+            res = FSSession::OpenSession(&sdmc, ARCHIVE_SDMC, {PATH_EMPTY, 1, (u8*)""});
+            if(res < 0) throw res;
+            sdmc->chdir("OCDM");
+            
+            puts("[GAME] Initializing ExtData");
+            res = FSSession::OpenExtdata(&extdata, extid);
+            if(res < 0) throw res;
+            
+            if(envIsHomebrew())
+            {
+                fsUseSession(fsu);
+                
+                puts("[GAME] Initializing Savedata");
+                res = FSSession::OpenSession(&save, ARCHIVE_SAVEDATA, {PATH_EMPTY, 1, (u8*)""});
+                
+                fsEndUseSession();
+                
+                if(res < 0) throw res;
+            }
+            else
+            {
+                u32 path[3];
+                path[0] = MEDIATYPE_SD;
+                *(u64*)(&path[1]) = saveid;
+                puts("[GAME] Initializing Savedata");
+                res = FSSession::OpenSession(&save, ARCHIVE_USER_SAVEDATA, {PATH_BINARY, 0xC, path});
+                if(res < 0) throw res;
+            }
+            
+            puts("[GAME] Loading Savedata");
+            res = ProgressLoad();
+            if(res < 0) throw res;
+            
+            puts("[GAME] Loading course information");
+            do
+            {
+                int i;
+                u8 bufptr[0x100];
+                char buf[0x10];
+                
+                for(i = 0; i != 220; i++)
+                {
+                    u8 slot = prog->slots[i];
+                    
+                    if(slot == 0xFF)
+                    {
+                        slots[i] = nullptr;
+                    }
+                    else
+                    {
+                        snprintf(buf, 0x10, "course%03i", slot);
+                        printf("[GAME] Opening /%s\n", buf);
+                        FSFile* f = nullptr;
+                        res = extdata->OpenFile(&f, buf, FS_OPEN_READ);
+                        if(res < 0) throw res;
+                        
+                        res = f->read_direct(bufptr, 0x100, 0, nullptr);
+                        delete f;
+                        
+                        LevelEntry* le = new LevelEntry;
+                        memset(le, 0, sizeof(*le));
+                        lt_parsele(le, slot, bufptr);
+                        
+                        slots[i] = le;
+                    }
+                }
+                
+                slots[220] = new LevelEntry;
+                lt_parsele(slots[220], 220, nullptr); //TODO: undummy
+            }
+            while(0);
+            
+            //=====[Basic stuff -end-]=====
+        }
+        
+        Result ProgressLoad()
+        {
+            FSFile* savedata = nullptr;
+            if(fsu) fsUseSession(fsu);
+            Result res = save->OpenFile(&savedata, "Progress", FS_OPEN_READ);
+            if(fsu) fsEndUseSession();
+            if(res < 0) return res;
+            
+            u32 savesize = 0;
+            savedata->size(&savesize);
+            u8* bufptr = new u8[savesize];
+            savedata->read_direct(bufptr, savesize, 0, nullptr);
+            if(prog) delete prog;
+            prog = new Progress(bufptr);
+            delete savedata;
+            
+            return 0;
+        }
+        
+        Result ProgressSave()
+        {
+            if(!prog) return -1;
+            
+            FSFile* savedata = nullptr;
+            if(fsu) fsUseSession(fsu);
+            Result res = save->OpenFile(&savedata, "Progress", FS_OPEN_WRITE);
+            if(fsu) fsEndUseSession();
+            if(res < 0) return res;
+            
+            u32 savesize = 0;
+            savedata->size(&savesize);
+            savedata->write_direct(prog->bufptr, savesize, 0, nullptr);
+            savedata->flush();
+            delete savedata;
+            
+            return 0;
+        }
+        
+        /**
+         * Cause a game tick
+         * 
+         * Ticks the active menu if there's one
+         * Ticks the active level if there's one
+         * 
+         * Returns 0 if successful, otherwise an error code
+         * If there's nothing to tick (both menu and level are nullptr), this'll generate a 0xFEEDDEAD error
+         */
+        int Tick()
+        {
+            //snd->Tick();
+            
+            if(menu)
+            {
+                tick++;
+                return menu->Update();
+            }
+            else return 0xFEEDDEAD;
+            //return 0;
+        }
+        
+        /**
+         * Causes the game to render
+         * 
+         * Renders the level on the top screen if present
+         * Renders the menu's overlay if a menu is present
+         * 
+         * Renders the menu on the bottom screen if present
+         */
+        void Render()
+        {
+            /*
+            gfxw_startscreen(0);
+            
+            if(menu) menu->RenderOverlay();
+            
+            fps = sf2d_get_fps();
+            
+            char buf[16];
+            snprintf(buf, 16, "Tick: %i", tick);
+            mono8->RenderStringR(3, 3, buf, 2, 0xAC, 0, 0x440000);
+            mono8->RenderStringR(2, 2, buf, 2, 0xFF, 0, 0x880000);
+            snprintf(buf, 16, "FPS: %.2f", fps);
+            mono8->RenderStringR(3, 15, buf, 2, 0xAC, 0, 0x440000);
+            mono8->RenderStringR(2, 14, buf, 2, 0xFF, 0, 0x880000);
+            
+            gfxw_endscreen();*/
+            
+            gfxw_startscreen(1);
+            
+            if(menu) menu->Render();
+            
+            gfxw_endscreen();
+        }
+        
+        /**
+         * Pushes a Menu object on the fake stack, making `m` the top-level menu
+         * 
+         * Parameters:
+         * - m = a Menu object instance
+         * 
+         * Notes:
+         * - You can return to the previous menu by popping it from the fake stack using <Game->PopMenu> or <Game->PopMenuAuto>
+         *   - See notes on <Game->PopMenu> and <Game->PopMenuAuto> to determine which one you want to use
+         * - Pushing nullptr will result in an undefined behavior, please avoid doing such thing! 
+         */
+        void PushMenu(Menu* m)
+        {
+            Menu* p = menu;
+            if(p) p->OnDeactive();
+            m->parent = p;
+            m->OnActive();
+            menu = m;
+        }
+        
+        /**
+         * Pops a menu from the fake stack
+         * If there was an active menu before, it'll be restored
+         * 
+         * Returns:
+         * - the previous menu object on the fake stack
+         * - if there was no active menu, it'll return a nullptr
+         * 
+         * Note:
+         * - after you did you operations on the returned Menu object, you MUST free it! 
+         */
+        Menu* PopMenu()
+        {
+            if(!menu) return nullptr;
+            Menu* p = menu;
+            menu = menu->parent;
+            p->OnDeactive();
+            if(menu) menu->OnActive();
+            return p;
+        }
+        
+        /**
+         * Pops a Menu object from the fake stack, and sets the previous Menu object as the current one
+         * 
+         * Notes:
+         * - this funciton is safe to call as many times you want, it'll never crash
+         * - if you need the popped Menu object, see <Game->PopMenu>
+         */
+        void PopMenuAuto()
+        {
+            Menu* m = PopMenu();
+            if(m) delete m;
+        }
+        
+        /**
+         * Returns a relative generated path
+         * 
+         * Parameters:
+         * - res = resource type, see <MM::RESTYPE> for details
+         * - wat = pointer to the relative path, or nullptr (see notes for nullptr behavior)
+         * 
+         * Returns:
+         * - a pointer to the generated path
+         * 
+         * Notes:
+         * - the returned pointer is static, NEVER free it!
+         * - if you need multiple strings in one go from this function, backup the buffer contents accordingly
+         * - if you give `wat` a nullptr, it'll return the "absolute" directory to the buffer with a trailing slash 
+         */
+        char* Resolve(RESTYPE res, char* wat)
+        {
+            static char ret[262];
+            memset(ret, 0, sizeof(ret));
+            //strcat(ret, "MM/");
+            
+            switch(res)
+            {
+                case RESTYPE::RES_GENERAL:
+                    strcat(ret, "romfs:/");
+                    if(wat) strcat(ret, wat);
+                    break;
+                case RESTYPE::RES_EXTRAASSET:
+                    strcat(ret, "romfs:/misc/");
+                    if(wat) strcat(ret, wat);
+                    break;
+                case RESTYPE::RES_TEXTURE:
+                case RESTYPE::RES_ANIMATION:
+                    strcat(ret, "romfs:/grafx/");
+                    if(wat)
+                    {
+                        strcat(ret, wat);
+                        strcat(ret, res == RESTYPE::RES_ANIMATION ? ".bam" : ".bim");
+                    }
+                    break;
+                case RESTYPE::RES_LUA:
+                    strcat(ret, "romfs:/lua/");
+                    if(wat)
+                    {
+                        strcat(ret, wat);
+                        strcat(ret, ".lua");
+                    }
+                    break;
+                /*case RESTYPE::RES_SOUND:
+                    strcat(ret, "romfs:/audio/");
+                    if(wat)
+                    {
+                        strcat(ret, wat);
+                        strcat(ret, ".ogg");
+                    }
+                    break;*/
+                case RESTYPE::RES_SDMC:
+                    strcat(ret, "/OCDM/");
+                    if(wat)
+                    {
+                        strcat(ret, wat);
+                    }
+                    break;
+                default:
+                    return 0;
+            }
+            
+            return ret;
+        }
+        
+        static s16 rand(s16 rng) //Parallel Universe generator
+        {
+            if(rng == 0x560A) rng = 0;
+            s16 s0 = rng << 8;
+            s0 ^= rng;
+            rng = ((s0 & 0xFF) << 8) | ((s0 & 0xFF00) >> 8);
+            s0 <<= 1;
+            s0 ^= rng;
+            s16 s1 = (s0 >> 1) ^ 0xFF80;
+            if(s0 & 1) rng = s1 ^ 0x8180;
+            else if(s1 == 0xAA55) rng = 0;
+            else rng = s1 ^ 0x1FF4;
+            return rng;
+        }
+        
+        static int rand4() //guaranteed to be random
+        {
+            return ((svcGetSystemTick() & 1) + 1) << 2;
+        }
+    };
+}

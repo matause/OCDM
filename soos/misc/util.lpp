@@ -1,0 +1,85 @@
+#hdr
+#include <3ds.h>
+
+#include <cstdlib>
+#include <cstring>
+#end
+
+
+namespace MM
+{
+    enum RESTYPE
+    {
+        RES_GENERAL = 0,
+        RES_TEXTURE,
+        RES_LUA,
+        //RES_SOUND,
+        RES_ANIMATION,
+        RES_EXTRAASSET,
+        RES_SDMC
+    };
+    
+    namespace UTIL
+    {
+        template<typename T> class WriteOnce
+        {
+        private:
+            T value;
+            int isset;
+            
+            WriteOnce& operator=(const WriteOnce& other);
+            
+        public:
+            WriteOnce(T initial)
+            {
+                value = initial;
+                isset = 0;
+            }
+            
+            operator T()
+            {
+                return value;
+            }
+            
+            WriteOnce<T>& operator=(const T& val)
+            {
+                if(!isset)
+                {
+                    value = val;
+                    isset = 1;
+                }
+                return *this;
+            }
+        };
+        
+        template<typename T> char* num2dec(T num)
+        {
+            static char numbuf[32];
+            memset(numbuf, 0, sizeof(numbuf));
+            
+            T backup = num;
+            u32 max = 0;
+            if(num < 0)
+            {
+                strcat(numbuf, "-");
+                num = abs(num);
+            }
+            while(backup)
+            {
+                max += 1;
+                backup /= 10;
+            }
+            
+            char* s = numbuf + strlen(numbuf);
+            s += max;
+            
+            while(num)
+            {
+                *(--s) = (num % 10) + '0';
+                num /= 10;
+            }
+            
+            return numbuf;
+        }
+    }
+}

@@ -1,0 +1,151 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+}
+
+#include "game/game.hpp"
+
+#include "game/menu/gui/GUIElement.hpp"
+
+using MM::Game;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::GUIElement;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            template<typename T>
+            class ScrollableList : public GUIElement
+            {
+            protected:
+                s16 tx, ty;
+                int scroll;
+                int scrolling;
+                
+            public:
+                LinkedList<T*> elems;
+                
+                
+                ScrollableList(s16 x, s16 y, u16 w, u16 h) : GUIElement(x, y, w, h), tx(-1), ty(-1)
+                {
+                    scroll = 0;
+                    scrolling = 0;
+                }
+                
+                void Render(s16 rx, s16 ry)
+                {
+                    int x = scroll;
+                    
+                    auto i = elems.Iterate();
+                    while(i->avail())
+                    {
+                        if(x >= this->h) break;
+                        
+                        GUIElement* e = i->next();
+                        if(!e) continue;
+                        
+                        int bot = x + e->h;
+                        if(bot < 0)
+                        {
+                            x = bot;
+                            continue;
+                        }
+                        
+                        e->Render(rx + e->x, ry + x);
+                        
+                        x = bot;
+                    }
+                    delete i;
+                    
+                    if(x < this->h) scroll += this->h - x;
+                }
+                
+                void Tick()
+                {
+                    auto i = elems.Iterate();
+                    while(i->avail())
+                    {
+                        GUIElement* e = i->next();
+                        if(!e) continue;
+                        
+                        e->Tick();
+                    }
+                    delete i;
+                }
+                
+                void TouchStart(s16 x, s16 y)
+                {
+                    tx = x;
+                    ty = y;
+                    scrolling = 0;
+                }
+                
+                void TouchHold(s16 x, s16 y)
+                {
+                    if(!scrolling)
+                    {
+                        if(abs(ty - y) >> 3) scrolling = 1;
+                    }
+                    if(scrolling)
+                    {
+                        int diff = y - ty;
+                        if(diff && scroll <= 0)
+                        {
+                            int re = scroll + diff;
+                            if(re > 0) re = 0;
+                            scroll = re;
+                            
+                            ty = y;
+                        }
+                    }
+                }
+                
+                void TouchRelease()
+                {
+                    if(scrolling) return;
+                    
+                    int y = scroll;
+                    
+                    auto i = elems.Iterate();
+                    while(i->avail())
+                    {
+                        if(y >= this->h) break;
+                        
+                        GUIElement* e = i->next();
+                        if(!e) continue;
+                        
+                        int bot = y + e->h;
+                        if(bot < 0)
+                        {
+                            y = bot;
+                            continue;
+                        }
+                        
+                        if(ty < bot && ty >= y)
+                        {
+                            s16 sx = tx;
+                            if(sx >= e->w) sx = e->w - 1;
+                            s16 sy = ty - y;
+                            e->TouchStart(sx, sy);
+                            e->TouchHold(sx, sy);
+                            e->TouchRelease();
+                            
+                            break;
+                        }
+                        
+                        y = bot;
+                    }
+                    delete i;
+                }
+            };
+        }
+    }
+}

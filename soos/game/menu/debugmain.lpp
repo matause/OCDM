@@ -1,0 +1,101 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+
+#include "consoleshit.h"
+}
+
+#include "game/game.hpp"
+#include "game/menu.hpp"
+#include "game/menu/MenuInterface.hpp"
+
+#include "game/menu/gui/GUIButton.hpp"
+#include "game/menu/gui/ScrollableList.hpp"
+
+#include "game/menu/MenuCourseLocal.hpp"
+
+using MM::Game;
+using MM::GAME::Menu;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::MenuInterface;
+
+using MM::GAME::MENU::GUIButton;
+
+using MM::GAME::MENU::MenuCourseLocal;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            class DebugMain : public MenuInterface
+            {
+            private:
+                ScrollableList<GUIButton>* scroll;
+                
+            public:
+                DebugMain() : MenuInterface()
+                {
+                    scroll = new ScrollableList<GUIButton>(0, 0, 320, 240);
+                    elems.Put(scroll);
+                    auto e = &scroll->elems;
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "crash test",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                throw 56;
+                            }
+                        )
+                    );
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "Local data management",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                Game::i->PushMenu(new MM::GAME::MENU::MenuCourseLocal);
+                            }
+                        )
+                    );
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "Online Course Database",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                throw 56;
+                            }
+                        )
+                    );
+                }
+                
+                void OnActive()
+                {
+                    consoleClear();
+                    printheader();
+                    
+                    printf("\n\n\nC%cedits:\n\n\n", ((svcGetSystemTick() >> 1) & 0xF) ? 'r' : 'l');
+                    
+                    puts("Sonomi-nyan~ :<     -- programmer / REer");
+                    puts("smb123w64gb         -- original save conversion code");
+                    puts("CeeDee @ GBATemp    -- application logo");
+                    puts("SomeGamer @ GBATemp -- course LockoutID \"exploit\"");
+                }
+            };
+        }
+    }
+}

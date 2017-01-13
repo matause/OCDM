@@ -1,0 +1,216 @@
+#hdr
+#include <3ds.h>
+#end
+
+
+namespace MM
+{
+    namespace DS
+    {
+        template<typename T> class LinkedList
+        {
+        private:
+            struct LinkedNode
+            {
+                T wat;
+                LinkedNode* next;
+                
+                LinkedNode()
+                {
+                    next = nullptr;
+                }
+            };
+            
+            LinkedNode* root;
+            
+            void Destruct(LinkedNode* curr)
+            {
+                if(curr)
+                {
+                    if(curr->next) Destruct(curr->next);
+                    delete curr;
+                }
+            }
+        public:
+            class LinkedListIterator
+            {
+            private:
+                LinkedNode* n;
+                
+            public:
+                LinkedListIterator(LinkedNode* n)
+                {
+                    this->n = n;
+                }
+                
+                int avail()
+                {
+                    return n != nullptr;
+                }
+                
+                T next()
+                {
+                    T r = n->wat;
+                    n = n->next;
+                    return r;
+                }
+            };
+            
+            LinkedList()
+            {
+                root = nullptr;
+            }
+            
+            ~LinkedList()
+            {
+                LinkedNode* n = root;
+                while(n)
+                {
+                    LinkedNode* delet = n;
+                    n = n->next;
+                    delete delet;
+                }
+            }
+            
+            u32 cnt()
+            {
+                u32 cnt = 0;
+                LinkedNode* curr = root;
+                while(curr) { cnt++; curr = curr->next; }
+                return cnt;
+            }
+            
+            int haz()
+            {
+                return root != nullptr;
+            }
+            
+            void Push(T wat)
+            {
+                LinkedNode* node = new LinkedNode;
+                node->wat = wat;
+                node->next = root;
+                root = node;
+            }
+            
+            int Pull(T* wat)
+            {
+                if(!root) return 0;
+                *wat = root->wat;
+                LinkedNode* node = root->next;
+                delete root;
+                root = node;
+                return 1;
+            }
+            
+            u32 Put(T wat)
+            {
+                u32 pos = 1;
+                if(!root)
+                {
+                    root = new LinkedNode;
+                    root->wat = wat;
+                    root->next = nullptr;
+                    return 0;
+                }
+                
+                LinkedNode* curr = root;
+                
+                while(curr->next) { pos++; curr = curr->next; }
+                curr->next = new LinkedNode;
+                curr->next->wat = wat;
+                curr->next->next = nullptr;
+                
+                return pos;
+            }
+            
+            u32 PutAt(T wat, u32 where)
+            {
+                u32 pos = 0;
+                if(!root) root = new LinkedNode;
+                LinkedNode* curr = root;
+                
+                while(pos != where && curr->next) { pos++; curr = curr->next; }
+                
+                LinkedNode* backup = nullptr;
+                if(curr->next) backup = curr->next;
+                curr->next = new LinkedNode;
+                curr->next->wat = wat;
+                if(backup) curr->next->next = backup;
+                
+                return pos;
+            }
+            
+            int Get(u32 pos, T* wat)
+            {
+                u32 cur = 0;
+                LinkedNode* curr = root;
+                
+                while(curr && cur != pos) { cur++; curr = curr->next; }
+                if(!curr) return 1;
+                
+                *wat = curr->wat;
+                return 0;
+            }
+            
+            int Pop(T* wat)
+            {
+                LinkedNode* curr = root;
+                if(!curr) return 1;
+                if(!curr->next) { if(wat) *wat = curr->wat; delete root; root = nullptr; return 0; }
+                
+                while(curr->next->next) curr = curr->next;
+                
+                if(wat) *wat = curr->next->wat;
+                delete curr->next;
+                curr->next = nullptr;
+                
+                return 0;
+            }
+            
+            int Del(u32 pos, T* wat)
+            {
+                u32 cur = 0;
+                LinkedNode* curr = root;
+                if(!curr) return 1;
+                
+                LinkedNode* prev = nullptr;
+                
+                while(curr && cur != pos) { cur++; prev = curr; curr = curr->next; }
+                if(!curr) return 1;
+                
+                if(prev)
+                {
+                    prev->next = curr->next;
+                }
+                else
+                {
+                    root = curr->next;
+                }
+                
+                if(wat) *wat = curr->wat;
+                
+                delete curr;
+                if(!pos) root = nullptr;
+                return 0;
+            }
+            
+            int Fnd(T wat, u32* out)
+            {
+                u32 cur = 0;
+                LinkedNode* curr = root;
+                
+                while(curr && curr->wat != wat) { cur++; curr = curr->next; }
+                if(!curr) return 1;
+                
+                if(out) *out = cur;
+                return 0;
+            }
+            
+            LinkedListIterator* Iterate()
+            {
+                return new LinkedListIterator(root);
+            }
+        };
+    }
+}

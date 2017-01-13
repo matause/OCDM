@@ -1,0 +1,55 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+}
+
+#include "game/game.hpp"
+
+#include "game/menu/gui/GUIElement.hpp"
+
+using MM::Game;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::GUIElement;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            class GUIButton : public GUIElement
+            {
+            protected:
+                char text[256];
+                
+                
+            public:
+                typedef void (*ClickHandlerFunc)(GUIButton* dis, s16 x, s16 y);
+                
+                ClickHandlerFunc clickhandler;
+                
+                
+                GUIButton(s16 x, s16 y, u16 w, u16 h, char* label, ClickHandlerFunc clickhandler) : GUIElement(x, y, w, h), clickhandler(clickhandler)
+                {
+                    strncpy(text, label, 256);
+                }
+                
+                virtual void Render(s16 rx, s16 ry)
+                {
+                    gfxw_drawrect(rx, ry, w, h, 0xFF423607);
+                    Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(text) >> 1), (ry + (h >> 1)) - (Game::i->mono8->h >> 1), text, 0xFF, 0xA1A193);
+                }
+                
+                virtual void TouchStart(s16 x, s16 y)
+                {
+                    if(clickhandler) clickhandler(this, x, y);
+                }
+            };
+        }
+    }
+}

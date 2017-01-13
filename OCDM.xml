@@ -1,0 +1,9 @@
+<!--<header>
+	<processHookTidHigh>0x00040000</processHookTidHigh>
+	<processHookTidLow>0x001A0400</processHookTidLow>
+	<mediatype>1</mediatype>
+</header>-->
+<targets selectable="true">
+	<title>0x00040000001A0400</title>
+	<title>0x00040000001A0500</title>
+</targets>

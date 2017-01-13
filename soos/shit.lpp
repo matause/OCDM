@@ -1,0 +1,36 @@
+#hdr
+#include <3ds.h>
+
+#end
+
+
+namespace MM
+{
+    namespace SHIT
+    {
+        class Progress
+        {
+        public:
+            u8* bufptr;
+            
+            u32* checksum;
+            u64* LockoutID;
+            u8* slots;
+            
+            
+            Progress(u8* ptr)
+            {
+                bufptr = ptr;
+                
+                checksum = (u32*)ptr;
+                LockoutID = (u64*)(ptr + 0x10);
+                slots = (u8*)(ptr + 0x2268);
+            }
+            
+            ~Progress()
+            {
+                delete[] bufptr;
+            }
+        };
+    }
+}

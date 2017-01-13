@@ -1,0 +1,162 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+
+#include "consoleshit.h"
+}
+
+#include "game/game.hpp"
+#include "game/menu.hpp"
+#include "game/menu/MenuInterface.hpp"
+
+#include "game/menu/gui/GUIButton.hpp"
+#include "game/menu/gui/ScrollableList.hpp"
+#include "game/menu/gui/shit/ShitCourse4.hpp"
+
+using MM::Game;
+using MM::GAME::Menu;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::MenuInterface;
+
+using MM::GAME::MENU::GUIButton;
+using MM::GAME::MENU::SHIT::ShitCourse4;
+using MM::GAME::MENU::SHIT::ShitCourseButton;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            class MenuCourseLocal : public MenuInterface
+            {
+            private:
+                ScrollableList<GUIElement>* scroll;
+                
+                ShitCourse4<MenuCourseLocal>* selected;
+                
+            public:
+                MenuCourseLocal() : MenuInterface()
+                {
+                    selected = nullptr;
+                    
+                    scroll = new ScrollableList<GUIElement>(0, 0, 320, 240);
+                    elems.Put(scroll);
+                    auto e = &scroll->elems;
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "Export all courses",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                Result res = 0;
+                                char buf[0x80];
+                                
+                                u8 slot = 0xFF;
+                                int cy;
+                                for(cy = 0; cy != 220; cy++)
+                                {
+                                    slot = Game::i->prog->slots[cy];
+                                    if(slot == 0xFF) continue;
+                                    
+                                    snprintf(buf, sizeof(buf), "course%03i", slot);
+                                    FSFile* f = nullptr;
+                                    res = Game::i->extdata->OpenFile(&f, buf, FS_OPEN_READ);
+                                    if(res < 0)
+                                    {
+                                        printf("#%03i FAIL: %08X\n", slot, res);
+                                        continue;
+                                    }
+                                    
+                                    u64 size = 0;
+                                    f->size(&size);
+                                    u8* bufptr = new u8[size];
+                                    res = f->read_direct(bufptr, size, 0, nullptr);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        delete[] bufptr;
+                                        printf("#%03i File FAIL: %08X\n", slot, res);
+                                    }
+                                    
+                                    FSFile* fo = nullptr;
+                                    
+                                    snprintf(buf, sizeof(buf), "export/course%03i", slot);
+                                    res = Game::i->sdmc->OpenFile(&fo, buf, FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                    if(res < 0)
+                                    {
+                                        printf("#03i SDMC export FAIL: %08X\n", slot, res);
+                                    }
+                                    else
+                                    {
+                                        fo->write_direct(bufptr, size, 0, nullptr);
+                                        fo->flush();
+                                        delete fo;
+                                        fo = nullptr;
+                                    }
+                                    
+                                    snprintf(buf, sizeof(buf), "export/course%03i_thumbnail.bin", slot);
+                                    res = Game::i->sdmc->OpenFile(&fo, buf, FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                    if(res < 0)
+                                    {
+                                        printf("#03i SDMC thumbnail export FAIL: %08X\n", slot, res);
+                                    }
+                                    else
+                                    {
+                                        fo->write_direct(bufptr + 0x2A01C, 0x157C0, 0, nullptr);
+                                        fo->flush();
+                                        delete fo;
+                                        fo = nullptr;
+                                    }
+                                    
+                                    delete[] bufptr;
+                                }
+                            }
+                        )
+                    );
+                    
+                    int i;
+                    for(i = 0; i != 55; i++)
+                    {
+                        e->Put
+                        (
+                            new ShitCourse4<MenuCourseLocal>
+                            (
+                                0, 0, 320, SlotHandlerFunc,
+                                4 * i, (4 * i) + 1, (4 * i) + 2, (4 * i) + 3,
+                                this
+                            )
+                        );
+                    }
+                }
+                
+                static void SlotHandlerFunc(MenuCourseLocal* wat, ShitCourse4<MenuCourseLocal>* me, int which, u8 slot)
+                {
+                    if(wat->selected != me)
+                    {
+                        if(wat->selected)
+                        {
+                            wat->selected->open = 0;
+                            wat->selected->le = nullptr;
+                        }
+                    }
+                    
+                    wat->selected = me;
+                }
+                
+                void OnActive()
+                {
+                    consoleClear();
+                    printheader();
+                }
+            };
+        }
+    }
+}

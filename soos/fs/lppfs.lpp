@@ -1,0 +1,410 @@
+#hdr
+#include <3ds.h>
+#include <stdio.h>
+#include <string.h>
+
+#end
+
+
+namespace MM
+{
+    namespace FS
+    {
+        class FSFile
+        {
+        private:
+            Handle filehandle;
+            u64 woffs;
+            
+        public:
+            FSFile(Handle filehandle) : woffs(0)
+            {
+                this->filehandle = filehandle;
+            }
+            
+            ~FSFile()
+            {
+                FSFILE_Close(filehandle);
+            }
+            
+            Result read_direct(void* buf, u32 size, u64 offs, u32* readno = nullptr)
+            {
+                u32 readn;
+                Result res = FSFILE_Read(filehandle, &readn, offs, buf, size);
+                if(readno) *readno = readn;
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result read(void* buf, u32 size, u32* readno = nullptr)
+            {
+                Result res = read_direct(buf, size, woffs, readno);
+                if(res < 0) return res;
+                
+                woffs += size;
+                
+                return 0;
+            }
+            
+            Result write_direct(void* buf, u32 size, u64 offs, u32* readno = nullptr)
+            {
+                u32 readn;
+                Result res = FSFILE_Write(filehandle, &readn, offs, buf, size, 0);
+                if(readno) *readno = readn;
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result write(void* buf, u32 size, u32* readno = nullptr)
+            {
+                Result res = write_direct(buf, size, woffs, readno);
+                if(res < 0) return res;
+                
+                woffs += size;
+                
+                return 0;
+            }
+            
+            void seek(u64 offs)
+            {
+                woffs = offs;
+            }
+            
+            u64 tell()
+            {
+                return woffs;
+            }
+            
+            Result flush()
+            {
+                return FSFILE_Flush(filehandle);
+            }
+            
+            Result size(u64* size)
+            {
+                return FSFILE_GetSize(filehandle, size);
+            }
+            
+            Result size(u32* out)
+            {
+                u64 dummy = 0;
+                Result res = size(&dummy);
+                if(res < 0) return res;
+                
+                *out = dummy;
+                
+                return 0;
+            }
+            
+            Result expand(u64 dong)
+            {
+                return FSFILE_SetSize(filehandle, dong);
+            }
+            
+            Result attr(u32* attr)
+            {
+                return FSFILE_GetAttributes(filehandle, attr);
+            }
+            
+            Result attradd(u32 flags)
+            {
+                u32 n = 0;
+                Result res = attr(&n);
+                if(res < 0) return res;
+                
+                if((n & flags) == flags) return 0x082047EB;
+                
+                res = FSFILE_SetAttributes(filehandle, n | flags);
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result attrdel(u32 flags)
+            {
+                u32 n = 0;
+                Result res = attr(&n);
+                if(res < 0) return res;
+                
+                if(!(n & flags)) return 0x082047EB;
+                
+                res = FSFILE_SetAttributes(filehandle, n & ~flags);
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result remain_direct(u64* remain, u64 offs, u64 maxsize = -1ULL)
+            {
+                u32* ipc = getThreadCommandBuffer();
+                ipc[0] = 0xC010100;
+                *(u64*)(ipc + 1) = offs;
+                *(u64*)(ipc + 3) = maxsize;
+                
+                Result res = svcSendSyncRequest(filehandle);
+                if(res < 0) return res;
+                
+                *remain = *(u64*)(ipc + 1);
+                
+                res = ipc[1];
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result remain(u64* remain)
+            {
+                Result res = remain_direct(remain, woffs);
+                if(res < 0) return res;
+                
+                return 0;
+            }
+            
+            Result remain(u32* out)
+            {
+                u64 dummy = 0;
+                Result res = remain(&dummy);
+                if(res < 0) return res;
+                
+                *out = dummy;
+                
+                return 0;
+            }
+            
+            Result subfile(FSFile** outhandle, u64 offs, u64 size)
+            {
+                Handle hand = 0;
+                Result res = FSFILE_OpenSubFile(filehandle, &hand, offs, size);
+                if(res < 0) return res;
+                
+                *outhandle = new FSFile(hand);
+                
+                return 0;
+            }
+        };
+        
+        class FSDirectory
+        {
+        private:
+            Handle dirhandle;
+            FS_DirectoryEntry dirent;
+            
+        public:
+            FSDirectory(Handle hand)
+            {
+                dirhandle = hand;
+            }
+            
+            ~FSDirectory()
+            {
+                FSDIR_Close(dirhandle);
+            }
+            
+            Result next()
+            {
+                u32 read = 0;
+                Result res = FSDIR_Read(dirhandle, &read, 1, &dirent);
+                if(res < 0) return res;
+                
+                if(!read) return 0x082047EB;
+                
+                return 0;
+            }
+            
+            FS_DirectoryEntry current()
+            {
+                return dirent;
+            }
+        };
+        
+        class FSSession
+        {
+        private:
+            FS_Archive fsa;
+            char root[262 + 1];
+            
+        public:
+            FSSession(FS_Archive fsa, const char* root)
+            {
+                this->fsa = fsa;
+                strncpy(this->root, root, 262);
+            }
+            
+            static Result OpenSession(FSSession** sess_out, FS_ArchiveID arch, FS_Path path, const char* root = "/")
+            {
+                FS_Archive fsa = 0;
+                Result res = FSUSER_OpenArchive(&fsa, arch, path);
+                if(res < 0) return res;
+                
+                *sess_out = new FSSession(fsa, root);
+                
+                return 0;
+            }
+            
+            static Result OpenExtdata(FSSession** sess_out, u32 extid, const char* root = "/")
+            {
+                FS_Archive fsa = 0;
+                u32 path[3] = {MEDIATYPE_SD, extid, 0};
+                Result res = FSUSER_OpenArchive(&fsa, ARCHIVE_EXTDATA, {PATH_BINARY, 0xC, path});
+                if(res < 0) return res;
+                
+                *sess_out = new FSSession(fsa, root);
+                
+                return 0;
+            }
+            
+            ~FSSession()
+            {
+                FSUSER_CloseArchive(fsa);
+            }
+            
+            Result OpenFile(FSFile** out, const char* path, u32 mode)
+            {
+                char buf[262 + 1];
+                if(*path == '/')
+                {
+                    strncpy(buf, path, 262);
+                }
+                else
+                {
+                    strncpy(buf, root, 262);
+                    strncat(buf, path, 262);
+                }
+                
+                FS_Path fspath = fsMakePath(PATH_ASCII, buf);
+                
+                Handle filehand = 0;
+                Result res = FSUSER_OpenFile(&filehand, fsa, fspath, mode, 0);
+                if(res < 0) return res;
+                
+                *out = new FSFile(filehand);
+                
+                return 0;
+            }
+            
+            Result OpenDirectory(FSDirectory** out, const char* path = "")
+            {
+                char buf[262 + 1];
+                if(*path == '/')
+                {
+                    strncpy(buf, path, 262);
+                }
+                else
+                {
+                    strncpy(buf, root, 262);
+                    strncat(buf, path, 262);
+                }
+                
+                FS_Path fspath = fsMakePath(PATH_ASCII, buf);
+                
+                Handle filehand = 0;
+                Result res = FSUSER_OpenDirectory(&filehand, fsa, fspath);
+                if(res < 0) return res;
+                
+                *out = new FSDirectory(filehand);
+                
+                return 0;
+            }
+            
+            void chdir_direct(const char* path)
+            {
+                if(*path == '/')
+                {
+                    strncpy(root, path, 262);
+                }
+                else
+                {
+                    *root = '/';
+                    strncpy(root + 1, path, 261);
+                }
+            }
+            
+            void chdir(const char* path)
+            {
+                if(*path == '/')
+                {
+                    strncpy(root, path, 262);
+                }
+                else
+                {
+                    int len = 262 - strnlen(root, 262);
+                    
+                    char* r = root + strnlen(root, 262);
+                    
+                    const char* ptr = path;
+                    const char* end = path;
+                    while(1)
+                    {
+                        if(!*end) break;
+                        
+                        ptr = end;
+                        
+                        while(*end && *end != '/') end++;
+                        while(*end == '/') end++;
+                        
+                        if(*ptr == '.')
+                        {
+                            if(!ptr[1]) break;
+                            if(ptr[1] == '/') continue;
+                            
+                            if(ptr[1] == '.')
+                            {
+                                if(r == root) continue;
+                                do
+                                {
+                                    while(*(--r) != '/' && r != root)
+                                    {
+                                        *r = 0;
+                                        len++;
+                                    }
+                                    if(r == root) *r = '/';
+                                }
+                                while(0);
+                                
+                                continue;
+                            }
+                        }
+                        
+                        while(len && *ptr)
+                        {
+                            *(r++) = *ptr;
+                            len--;
+                            
+                            if(*(ptr++) == '/')
+                            {
+                                ptr++;
+                                break;
+                            }
+                            if(!*ptr)
+                            {
+                                if(len)
+                                {
+                                    *(r++) = '/';
+                                    len--;
+                                }
+                                break;
+                            }
+                        }
+                        if(!len)
+                        {
+                            *(r--) = 0;
+                            *(r++) = '/';
+                        }
+                    }
+                }
+            }
+            
+            const char* getcwd()
+            {
+                return root;
+            }
+            
+            Result CommitSavedata()
+            {
+                return FSUSER_ControlArchive(fsa, ARCHIVE_ACTION_COMMIT_SAVE_DATA, 0, 0, 0, 0);
+            }
+        };
+    }
+}

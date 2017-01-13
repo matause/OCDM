@@ -1,0 +1,173 @@
+#hdr
+#include <3ds.h>
+#include <stdlib.h>
+
+#include "derpscript/dspp_linkedlist.hpp"
+
+extern "C"
+{
+#include "grafx/drawer.h"
+}
+
+namespace MM
+{
+    class Game;
+}
+
+#include "game/game.hpp"
+
+using MM::Game;
+using MM::DS::LinkedList;
+#end
+
+namespace MM
+{
+    namespace GFX
+    {
+        class TextureUnit
+        {
+        protected:
+            u16 noicons;
+            IIcon** icons;
+            TextureManager* texmgr;
+            
+        
+            TextureUnit(IIcon** icons, u16 cnt) : texmgr(nullptr)
+            {
+                this->noicons = cnt;
+                this->icons = icons;
+            }
+        public:
+            TextureUnit(TextureManager* texmgr, IIcon** icons, u16 cnt) : TextureUnit(icons, cnt)
+            {
+                if(!texmgr) throw 0xFEEDFAAF;
+                this->texmgr = texmgr;
+            }
+            
+            virtual ~TextureUnit()
+            {
+                for(u8 i = 0; i != noicons; i++)
+                {
+                    unloadicon(icons[i]);
+                }
+                
+                free(icons);
+                
+                texmgr->DelHandle(this);
+            }
+            
+            virtual IIcon* operator [](u32 index)
+            {
+                return icons[index % noicons];
+            }
+        };
+        
+        class AnimationUnit : public TextureUnit
+        {
+        protected:
+            u8* frame;
+            u16 framecnt;
+            
+            
+        public:
+            AnimationUnit(TextureManager* texmgr, IIcon** iconlist, u16 cnt, u8* frame, u16 framecnt) : TextureUnit(texmgr, iconlist, cnt)
+            {
+                this->frame = frame;
+                this->framecnt = framecnt;
+            }
+            
+            ~AnimationUnit()
+            {
+                delete[] frame;
+            }
+            
+            IIcon* operator [](u32 index)
+            {
+                return icons[frame[index % framecnt]];
+            }
+        };
+                    
+        class TextureManager
+        {
+            
+        protected:
+            LinkedList<TextureUnit*>* textures;
+            int initd;
+            
+        public:
+            TextureManager() : initd(1)
+            {
+                textures = new LinkedList<TextureUnit*>;
+            }
+            
+            ~TextureManager()
+            {
+                initd = 0;
+                TextureUnit* wat;
+                LinkedList<TextureUnit*>::LinkedListIterator* ll = textures->Iterate();
+                while(ll->avail())
+                {
+                    wat = ll->next();
+                    if(wat) delete wat;
+                }
+                delete ll;
+                
+                delete textures;
+            }
+            
+            TextureUnit* LoadTexture(char* wat)
+            {
+                char* pth = Game::i->Resolve(RESTYPE::RES_TEXTURE, wat);
+                IIcon** icna;
+                u16 cnt;
+                int ret = loadtxmap(pth, &icna, &cnt);
+                if(ret)
+                {
+                    printf("[TMGR] Can't load texture: %08X\n", ret);
+                    return 0;
+                }
+                
+                return AddTexture(icna, cnt);
+            }
+            
+            AnimationUnit* LoadAnimation(char* wat)
+            {
+                char* pth = Game::i->Resolve(RESTYPE::RES_ANIMATION, wat);
+                IIcon** icna;
+                u16 cnt;
+                u16 acnt;
+                u8* a;
+                int ret = loadanimap(pth, &icna, &cnt, &a, &acnt);
+                if(ret)
+                {
+                    printf("[TMGR] Can't load animation: %08X\n", ret);
+                    return 0;
+                }
+                
+                return AddAnimation(icna, cnt, a, acnt);
+            }
+            
+            TextureUnit* AddTexture(IIcon** icna, u16 cnt)
+            {
+                TextureUnit* t = new TextureUnit(this, icna, cnt);
+                textures->Put(t);
+                return t;
+            }
+            
+            AnimationUnit* AddAnimation(IIcon** icna, u16 cnt, u8* a, u16 acnt)
+            {
+                AnimationUnit* t = new AnimationUnit(this, icna, cnt, a, acnt);
+                textures->Put(t);
+                return t;
+            }
+            
+            void DelHandle(TextureUnit* texunit)
+            {
+                if(!initd) return;
+                u32 index;
+                if(textures->Fnd(texunit, &index)) return;
+                textures->Del(index, nullptr);
+            }
+        };
+    }
+}

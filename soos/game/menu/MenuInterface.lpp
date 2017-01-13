@@ -1,0 +1,110 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+}
+
+#include "game/game.hpp"
+#include "game/menu.hpp"
+#include "game/menu/gui/GUIContainer.hpp"
+
+using MM::Game;
+using MM::GAME::Menu;
+using MM::GAME::MENU::GUIContainer;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            class MenuInterface : public Menu, public GUIContainer
+            {
+            protected:
+                GUIElement* curr;
+                
+                
+            public:
+                MenuInterface() : Menu(), GUIContainer(0, 0, 320, 240), curr(nullptr)
+                {
+                    
+                }
+                
+                virtual int Update()
+                {
+                    int istouch = (Game::i->kDown & KEY_TOUCH) ? 1 : 0;
+                    int istouching = (Game::i->kHeld & KEY_TOUCH) ? 1 : 0;
+                    s16 tx = 0, ty = 0;
+                    if(istouching)
+                    {
+                        tx = Game::i->touch.px - this->x;
+                        ty = Game::i->touch.py - this->y;
+                        if(tx < 0) tx = 0;
+                        else if(tx >= this->w) tx = this->w - 1;
+                        if(ty < 0) ty = 0;
+                        else if(ty >= this->h) ty = this->h - 1;
+                    }
+                    
+                    LinkedList<GUIElement*>::LinkedListIterator* i = elems.Iterate();
+                    while(i->avail())
+                    {
+                        GUIElement* e = i->next();
+                        if(!e) continue;
+                        e->Tick();
+                        
+                        if(!curr && istouch)
+                        {
+                            s16 rx = 0;
+                            s16 ry = 0;
+                            
+                            ChildOffset(e, &rx, &ry);
+                            
+                            if(rx <= tx && ry <= ty && (rx + e->w) > tx && (ry + e->h) > ty)
+                            {
+                                curr = e;
+                                e->TouchStart(tx - rx, ty - ry);
+                            }
+                        }
+                    }
+                    delete i;
+                    
+                    if(curr && !istouch)
+                    {
+                        if(istouching)
+                        {
+                            s16 rx = 0;
+                            s16 ry = 0;
+                            
+                            ChildOffset(curr, &rx, &ry);
+                            
+                            tx -= rx;
+                            ty -= ry;
+                            
+                            if(tx < 0) tx = 0;
+                            else if(tx >= curr->w) tx = curr->w - 1;
+                            if(ty < 0) ty = 0;
+                            else if(ty >= curr->h) ty = curr->h - 1;
+                            curr->TouchHold(tx, ty);
+                        }
+                        else
+                        {
+                            curr->TouchRelease();
+                            curr = nullptr;
+                        }
+                    }
+                    
+                    return 0;
+                }
+                
+                virtual void Render()
+                {
+                    GUIContainer::Render(this->x, this->y);
+                }
+            };
+        }
+    }
+}
