@@ -1,5 +1,7 @@
 #hdr
 #include <3ds.h>
+
+#include "game/game.hpp"
 #end
 
 namespace MM
@@ -10,9 +12,16 @@ namespace MM
         {
         public:
             Menu* parent;
+            int ded;
+            
+            Menu() : parent(nullptr), ded(0)
+            {
+                
+            }
             
             virtual int Update()
             {
+                if(Game::i->kDown & KEY_B) ded = 1;
                 return 0;
             }
             
@@ -34,6 +43,11 @@ namespace MM
             virtual void OnDeactive()
             {
                 
+            }
+            
+            virtual int HandleBack()
+            {
+                return 1;
             }
             
             virtual ~Menu()

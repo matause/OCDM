@@ -3,33 +3,21 @@
 
 #include "grafx/drawer.h"
 
-#include "pixel_png.h"
-
 static int currscreen = -1;
 
 s32 __screenw = 1;
 s32 __screenh = 1;
-
-IIcon* pixel = 0;
 
 Result gfxw_init()
 {
     Result res = sf2d_init();
     if(res < 0) return res;
     
-    pixel = malloc(sizeof(IIcon));
-    loadiconbuf(pixel_png, pixel_png_size, pixel);
-    
     return res;
 }
 
 Result gfxw_exit()
 {
-    if(pixel)
-    {
-        unloadicon(pixel);
-    }
-    
     return sf2d_fini();
 }
 
@@ -182,7 +170,8 @@ void gfxw_drawrect(s16 x, s16 y, s16 w, s16 h, int color)
 
 void gfxw_fillrect(s16 x, s16 y, s16 w, s16 h, int color)
 {
-    sf2d_draw_texture_scale_blend(pixel, x, y, w, h, color);
+    if(!(color >> 24)) color |= 0xFF << 24;
+    sf2d_draw_rectangle(x, y, w, h, color);
 }
 
 void gfxw_swapbuffer()

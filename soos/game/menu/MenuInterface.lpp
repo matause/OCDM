@@ -97,7 +97,14 @@ namespace MM
                         }
                     }
                     
+                    Tick();
+                    
                     return 0;
+                }
+                
+                virtual void Tick()
+                {
+                    
                 }
                 
                 virtual void Render()

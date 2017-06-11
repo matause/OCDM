@@ -43,44 +43,53 @@ namespace MM
             
             static u32 defaultcolor = 0xFF000000;
             
-            int CalcWidth(char* str)
+            int CalcWidth(const char* str)
             {
                 return CalcWidthN(str, strlen(str));
             }
             
-            int CalcWidthN(char* str, int len)
+            int CalcWidthN(const char* str, int len)
             {
                 if(len <= 0) return 0;
                 
                 int i = len;
+                len = 0;
                 int acc = 0;
                 while(i--)
                 {
-                    acc += w;
+                    if(*(str++) == '\n')
+                    {
+                        if(acc > len) len = acc;
+                        acc = 0;
+                    }
+                    else acc += w;
                 }
                 
-                return acc;
+                return len ? len : acc;
             }
             
-            int RenderStringR(s16 x, s16 y, char* c, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
+            int RenderStringR(s16 x, s16 y, const char* c, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
             {
                 return RenderStringRNS(x, y, SCREENW, SCREENH, c, strlen(c), intensity, a, rng, col);
             }
             
-            int RenderStringRNS(s16 sx, s16 sy, s16 ex, s16 ey, char* c, int len, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
+            int RenderStringRNS(s16 sx, s16 sy, s16 ex, s16 ey, const char* c, int len, u8 intensity = 2, u8 a = 0xFF, s16 rng = 0, u32 col = defaultcolor)
             {
                 if(sx >= ex || sy >= ey || len <= 0) return 0;
                 
                 if(!rng) rng = Game::rand(Game::i->tick >> 2);
+                
+                ex -= w;
+                ey -= h;
                 
                 int i = 0;
                 int cw = 0;
                 s16 x = sx;
                 s16 y = sy;
                 
-                while(y < ey)
+                while(y <= ey)
                 {
-                    while(x < ex)
+                    while(x <= ex)
                     {
                         if(i == len) return cw;
                         if(*c == '\n')
@@ -102,23 +111,26 @@ namespace MM
                 return cw;
             }
             
-            int RenderString(s16 x, s16 y, char* c, u8 a = 0xFF, u32 col = defaultcolor)
+            int RenderString(s16 x, s16 y, const char* c, u8 a = 0xFF, u32 col = defaultcolor)
             {
                 return RenderStringNS(x, y, SCREENW, SCREENH, c, strlen(c), a, col);
             }
             
-            int RenderStringNS(s16 sx, s16 sy, s16 ex, s16 ey, char* c, int len, u8 a = 0xFF, u32 col = defaultcolor)
+            int RenderStringNS(s16 sx, s16 sy, s16 ex, s16 ey, const char* c, int len, u8 a = 0xFF, u32 col = defaultcolor)
             {
                 if(sx >= ex || sy >= ey || len <= 0) return 0;
+                
+                ex -= w;
+                ey -= h;
                 
                 int i = 0;
                 int cw = 0;
                 s16 x = sx;
                 s16 y = sy;
                 
-                while(y < ey)
+                while(y <= ey)
                 {
-                    while(x < ex)
+                    while(x <= ex)
                     {
                         if(i == len) return cw;
                         if(*c == '\n')

@@ -308,6 +308,57 @@ namespace MM
                 return 0;
             }
             
+            Result mkfile(const char* path, u64 filesize, u32 attr = 0)
+            {
+                char buf[262 + 1];
+                if(*path == '/')
+                {
+                    strncpy(buf, path, 262);
+                }
+                else
+                {
+                    strncpy(buf, root, 262);
+                    strncat(buf, path, 262);
+                }
+                
+                FS_Path fspath = fsMakePath(PATH_ASCII, buf);
+                return FSUSER_CreateFile(fsa, fspath, attr, filesize);
+            }
+            
+            Result mkdir(const char* path, u32 attr = FS_ATTRIBUTE_DIRECTORY)
+            {
+                char buf[262 + 1];
+                if(*path == '/')
+                {
+                    strncpy(buf, path, 262);
+                }
+                else
+                {
+                    strncpy(buf, root, 262);
+                    strncat(buf, path, 262);
+                }
+                
+                FS_Path fspath = fsMakePath(PATH_ASCII, buf);
+                return FSUSER_CreateDirectory(fsa, fspath, attr);
+            }
+            
+            Result rmfile(const char* path)
+            {
+                char buf[262 + 1];
+                if(*path == '/')
+                {
+                    strncpy(buf, path, 262);
+                }
+                else
+                {
+                    strncpy(buf, root, 262);
+                    strncat(buf, path, 262);
+                }
+                
+                FS_Path fspath = fsMakePath(PATH_ASCII, buf);
+                return FSUSER_DeleteFile(fsa, fspath);
+            }
+            
             void chdir_direct(const char* path)
             {
                 if(*path == '/')
@@ -351,17 +402,21 @@ namespace MM
                             
                             if(ptr[1] == '.')
                             {
-                                if(r == root) continue;
+                                if(r != root)
                                 do
                                 {
-                                    while(*(--r) != '/' && r != root)
+                                    *(--r) = '\0';
+                                    len++;
+                                    
+                                    while(r != root && *(--r) != '/')
                                     {
                                         *r = 0;
                                         len++;
                                     }
-                                    if(r == root) *r = '/';
                                 }
                                 while(0);
+                                
+                                if(r == root) *(r++) = '/';
                                 
                                 continue;
                             }
@@ -387,7 +442,16 @@ namespace MM
                                 break;
                             }
                         }
-                        if(!len)
+                        if(len)
+                        {
+                            if(*(--r) != '/')
+                            {
+                                *(++r) = '/';
+                                *(++r) = '\0';
+                                len--;
+                            }
+                        }
+                        else
                         {
                             *(r--) = 0;
                             *(r++) = '/';

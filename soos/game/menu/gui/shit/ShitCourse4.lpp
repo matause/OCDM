@@ -12,11 +12,13 @@ extern "C"
 
 #include "game/menu/gui/GUIElement.hpp"
 #include "game/menu/gui/GUIContainer.hpp"
+#include "game/menu/gui/shit/ShitBrowser.hpp"
 
 using MM::Game;
 using MM::GFX::TextureUnit;
 using MM::GAME::MENU::GUIElement;
 using MM::GAME::MENU::GUIContainer;
+using MM::GAME::MENU::SHIT::ShitBrowser;
 #end
 
 
@@ -37,9 +39,10 @@ namespace MM
                     ClickHandlerFunc clickhandler;
                     LevelEntry* le;
                     T* wat;
+                    u8 sln;
                     
                     
-                    ShitCourseButton(s16 x, s16 y, u16 w, u16 h, ClickHandlerFunc clickhandler, LevelEntry* lv, T* wat) : GUIElement(x, y, w, h), clickhandler(clickhandler), le(lv), wat(wat)
+                    ShitCourseButton(s16 x, s16 y, u16 w, u16 h, ClickHandlerFunc clickhandler, u8 sln, LevelEntry* lv, T* wat) : GUIElement(x, y, w, h), clickhandler(clickhandler), le(lv), wat(wat), sln(sln)
                     {
                         
                     }
@@ -49,8 +52,8 @@ namespace MM
                         if(le)
                         {
                             gfxw_fillrect(rx, ry, w, h, 0xFF423607);
-                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->lvlname) >> 1), ry, le->lvlname, 0xFF, 0xA1A193);
-                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->miin) >> 1), ry + h - Game::i->mono8->h, le->miin, 0xFF, 0xA1A193);
+                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->lvlname) >> 1), ry + 4, le->lvlname, 0xFF, 0xA1A193);
+                            Game::i->mono8->RenderString(rx + (w >> 1) - (Game::i->mono8->CalcWidth(le->miin) >> 1), ry + h - Game::i->mono8->h - 4, le->miin, 0xFF, 0xA1A193);
                         }
                         else
                         {
@@ -60,7 +63,7 @@ namespace MM
                     
                     virtual void TouchStart(s16 x, s16 y)
                     {
-                        if(le && clickhandler) clickhandler(wat, this, x, y);
+                        if(clickhandler) clickhandler(wat, this, x, y);
                     }
                 };
                 
@@ -73,22 +76,27 @@ namespace MM
                     SlotHandlerFunc slothandler;
                     
                     int open;
-                    
-                    LevelEntry* le;
+                    ShitCourseButton<ShitCourse4>* btn;
                     T* wat;
+                    
+                    ShitBrowser* br;
+                    u16 sm;
                     
                     
                     ShitCourse4(s16 x, s16 y, u16 w, SlotHandlerFunc clickhandler, u8 s1, u8 s2, u8 s3, u8 s4, T* wat) : GUIContainer(x, y, w, 50), slothandler(clickhandler), wat(wat)
                     {
                         open = 0;
-                        le = nullptr;
+                        btn = nullptr;
+                        
+                        br = nullptr;
+                        sm = -1;
                         
                         elems.Put
                         (
                             new ShitCourseButton<ShitCourse4>
                             (
                                 0, 0, 80, 50, ShitButtonHandler,
-                                s1 == 0xFF ? nullptr : Game::i->slots[s1],
+                                s1, s1 == 0xFF ? nullptr : Game::i->slots[s1],
                                 this
                             )
                         );
@@ -97,7 +105,7 @@ namespace MM
                             new ShitCourseButton<ShitCourse4>
                             (
                                 80, 0, 80, 50, ShitButtonHandler,
-                                s1 == 0xFF ? nullptr : Game::i->slots[s2],
+                                s2, s2 == 0xFF ? nullptr : Game::i->slots[s2],
                                 this
                             )
                         );
@@ -106,7 +114,7 @@ namespace MM
                             new ShitCourseButton<ShitCourse4>
                             (
                                 160, 0, 80, 50, ShitButtonHandler,
-                                s1 == 0xFF ? nullptr : Game::i->slots[s3],
+                                s3, s3 == 0xFF ? nullptr : Game::i->slots[s3],
                                 this
                             )
                         );
@@ -115,7 +123,7 @@ namespace MM
                             new ShitCourseButton<ShitCourse4>
                             (
                                 240, 0, 80, 50, ShitButtonHandler,
-                                s1 == 0xFF ? nullptr : Game::i->slots[s4],
+                                s4, s4 == 0xFF ? nullptr : Game::i->slots[s4],
                                 this
                             )
                         );
@@ -123,30 +131,91 @@ namespace MM
                     
                     static void ShitButtonHandler(ShitCourse4* wat, ShitCourseButton<ShitCourse4>* dis, s16 x, s16 y)
                     {
-                        wat->open = dis->le != wat->le;
-                        wat->le = dis->le;
-                        if(!wat->open && wat->le) wat->le = nullptr;
+                        wat->open = wat->btn != dis;
+                        wat->btn = dis;
+                        if(!wat->open && wat->btn) wat->btn = nullptr;
                         
-                        if(wat->slothandler) wat->slothandler(wat->wat, wat, 0, wat->le ? wat->le->nth : -1);
+                        if(wat->slothandler) wat->slothandler(wat->wat, wat, 0, wat->btn ? wat->btn->le ? wat->btn->le->nth : -1 : -1);
                     }
                     
                     void Render(s16 offsx, s16 offsy)
                     {
                         GUIContainer::Render(offsx, offsy);
                         
-                        if(le)
+                        if(btn)
                         {
                             if(h > 70)
                             {
-                                Game::i->mono8->RenderString(offsx + 2, offsy + 56, le->lvlname, 0xFF, 0xA1A193);
+                                if(btn->sln == 0xFF)
+                                    Game::i->mono8->RenderString(offsx + 2, offsy + 56, "<invalid slot>", 0xFF, 0xA1A193);
+                                else if(btn->le)
+                                {
+                                    Game::i->mono8->RenderString(offsx + 160, offsy + 56, "  Export\n    3DS", 0xFF, 0xA1A193);
+                                    Game::i->mono8->RenderString(offsx + 2, offsy + 56, btn->le->lvlname, 0xFF, 0xA1A193);
+                                }
+                                else
+                                {
+                                    char buf[18];
+                                    snprintf(buf, sizeof(buf), "<empty slot %03i>", btn->sln);
+                                    Game::i->mono8->RenderString(offsx + 2, offsy + 56, buf, 0xFF, 0xA1A193);
+                                }
+                                
+                                if(btn->sln != 0xFF) Game::i->mono8->RenderString(offsx + 240, offsy + 56, "  Import\n    3DS", 0xFF, 0xA1A193);
                                 
                                 if(h > 90)
                                 {
-                                    Game::i->mono8->RenderString(offsx + 2, offsy + 80, "by", 0xFF, 0xA1A193);
-                                    Game::i->mono8->RenderString(offsx + 2 + (8 * 3), offsy + 80, le->miin, 0xFF, 0xA1A193);
+                                    if(btn->le)
+                                    {
+                                        Game::i->mono8->RenderString(offsx + 160, offsy + 80, "  Export\n   WiiU", 0xFF, 0xA1A193);
+                                        Game::i->mono8->RenderString(offsx + 2, offsy + 80, "by", 0xFF, 0xA1A193);
+                                        Game::i->mono8->RenderString(offsx + 2 + (8 * 3), offsy + 80, btn->le->miin, 0xFF, 0xA1A193);
+                                    }
+                                    
+                                    if(btn->sln != 0xFF)
+                                    if(btn->le) Game::i->mono8->RenderString(offsx + 240, offsy + 80, "  Import\n   WiiU", 0xFF, 0xA1A193);
                                 }
                             }
                         }
+                    }
+                    
+                    void TouchStart(s16 x, s16 y)
+                    {
+                        if(btn && btn->sln != 0xFF)
+                        {
+                            sm = -1;
+                            if(y >= 75)
+                            {
+                                if(x >= 240)
+                                {
+                                    br = new ShitBrowser(1);
+                                    sm = 0x300 | btn->sln;
+                                    Game::i->PushMenu(br);
+                                }
+                                else if(x >= 160)
+                                {
+                                    br = new ShitBrowser(1);
+                                    sm = 0x200 | btn->le->nth;
+                                    Game::i->PushMenu(br);
+                                }
+                            }
+                            else if(y >= 55)
+                            {
+                                if(x >= 240)
+                                {
+                                    br = new ShitBrowser(0);
+                                    sm = 0x100 | btn->sln;
+                                    Game::i->PushMenu(br);
+                                }
+                                else if(x >= 160)
+                                {
+                                    br = new ShitBrowser(1);
+                                    sm = btn->le->nth;
+                                    Game::i->PushMenu(br);
+                                }
+                            }
+                        }
+                        
+                        GUIContainer::TouchStart(x, y);
                     }
                     
                     void Tick()
@@ -158,6 +227,239 @@ namespace MM
                         else
                         {
                             if(h > 50) h-=2;
+                        }
+                        
+                        if(br)
+                        {
+                            string pth = br->selpath;
+                            
+                            delete br;
+                            br = nullptr;
+                            
+                            if(!pth.length()) return;
+                            
+                            u8 nth = sm & 0xFF;
+                            u8 mod = sm >> 8;
+                            
+                            if(!(mod & 1))
+                            do
+                            {
+                                char buf[32];
+                                *buf = '\0';
+                                
+                                SwkbdState swkbd;
+                                swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 2, sizeof(buf));
+                                //swkbdSetInitialText(&swkbd, buf);
+                                if(swkbdInputText(&swkbd, buf, sizeof(buf) - 1) != SWKBD_BUTTON_RIGHT) return;
+                                if(!strlen(buf)) return;
+                                
+                                pth += string(buf);
+                            }
+                            while(0);
+                            
+                            if(mod == 2) pth += "/";
+                            
+                            printf("course%03i <--> '%s' (mode %i)\n", nth, pth.c_str(), mod);
+                            
+                            Result res = 0;
+                            FSFile* f = nullptr;
+                            u8* bufptr = new u8[FILESIZE_COURSE];
+                            MM_CourseFile* cf = (MM_CourseFile*)bufptr;
+                            
+                            switch(mod)
+                            {
+                                case 0: //Export CTR
+                                {
+                                    res = Game::i->CourseOpen(&f, nth);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open course%03i: %08X\n", nth, res);
+                                        break;
+                                    }
+                                    
+                                    res = f->read_direct(bufptr, FILESIZE_COURSE, 0, nullptr);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to read course%03i: %08X\n", nth, res);
+                                        break;
+                                    }
+                                    
+                                    res = Game::i->sdmc->OpenFile(&f, pth.c_str(), FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open/create file '%s': %08X\n", pth.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    res = f->write_direct(bufptr, FILESIZE_COURSE, 0, nullptr);
+                                    if(res >= 0) f->flush();
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to write '%s': %08X\n", pth.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    break;
+                                }
+                                
+                                case 1: //Import CTR
+                                {
+                                    res = Game::i->sdmc->OpenFile(&f, pth.c_str(), FS_OPEN_READ);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open '%s' for read: %08X\n", pth.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    u32 rdn = 0;
+                                    
+                                    res = f->read_direct(bufptr, FILESIZE_COURSE, 0, &rdn);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to read '%s': %08X\n", pth.c_str(), res);
+                                        break;
+                                    }
+                                    if(rdn != FILESIZE_COURSE)
+                                    {
+                                        printf("Invalid filesize for '%s': 0x%X != 0x%X\n", pth.c_str(), rdn, FILESIZE_COURSE);
+                                        break;
+                                    }
+                                    
+                                    res = Game::i->CourseImportCTR(nth, cf);
+                                    if(res < 0)
+                                    {
+                                        printf("CourseImportCTR failed: %08X\n", res);
+                                        break;
+                                    }
+                                    
+                                    break;
+                                }
+                                
+                                case 2: //Export WUP
+                                {
+                                    res = Game::i->CourseOpen(&f, nth);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open course%03i: %08X\n", nth, res);
+                                        break;
+                                    }
+                                    
+                                    res = f->read_direct(bufptr, FILESIZE_COURSE, 0, nullptr);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to read course%03i: %08X\n", nth, res);
+                                        break;
+                                    }
+                                    
+                                    res = Game::i->sdmc->mkdir(pth.c_str());
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to create directory '%s': %08X\n", pth.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    lt_mkbe(&cf->course);
+                                    lt_mkbe(&cf->subcourse);
+                                    
+                                    string fn;
+                                    
+                                    fn = pth + "course_data.cdt";
+                                    res = Game::i->sdmc->OpenFile(&f, fn.c_str(), FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open/create file '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    res = f->write_direct((u8*)&cf->course, 0x15000, 0, nullptr);
+                                    if(res >= 0) f->flush();
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to write '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    fn = pth + "course_data_sub.cdt";
+                                    res = Game::i->sdmc->OpenFile(&f, fn.c_str(), FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open/create file '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    res = f->write_direct((u8*)&cf->subcourse, 0x15000, 0, nullptr);
+                                    if(res >= 0) f->flush();
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to write '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    
+                                    break;
+                                }
+                                
+                                case 3: //Import WUP
+                                {
+                                    string fn;
+                                    u32 rdn = 0;
+                                    
+                                    fn = pth + "course_data.cdt";
+                                    res = Game::i->sdmc->OpenFile(&f, fn.c_str(), FS_OPEN_READ);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open file '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    res = f->read_direct((u8*)&cf->course, 0x15000, 0, &rdn);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to read '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    if(rdn != 0x15000)
+                                    {
+                                        printf("Invalid filesize for '%s': 0x%X != 0x%X\n", pth.c_str(), rdn, 0x15000);
+                                        break;
+                                    }
+                                    
+                                    fn = pth + "course_data_sub.cdt";
+                                    res = Game::i->sdmc->OpenFile(&f, fn.c_str(), FS_OPEN_READ);
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to open file '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    res = f->read_direct((u8*)&cf->subcourse, 0x15000, 0, &rdn);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        printf("Failed to read '%s': %08X\n", fn.c_str(), res);
+                                        break;
+                                    }
+                                    if(rdn != 0x15000)
+                                    {
+                                        printf("Invalid filesize for '%s': 0x%X != 0x%X\n", pth.c_str(), rdn, 0x15000);
+                                        break;
+                                    }
+                                    
+                                    res = Game::i->CourseImportWUP(nth, cf);
+                                    if(res < 0)
+                                    {
+                                        printf("CourseImportWUP failed: %08X\n", res);
+                                        break;
+                                    }
+                                    
+                                    break;
+                                }
+                            }
+                            sm = -1;
+                            
+                            delete bufptr;
                         }
                     }
                 };

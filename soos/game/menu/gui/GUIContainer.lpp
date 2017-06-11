@@ -26,10 +26,11 @@ namespace MM
             class GUIContainer : public GUIElement
             {
             protected:
-                LinkedList<GUIElement*> elems;
                 GUIElement* curr;
                 
             public:
+                LinkedList<GUIElement*> elems;
+                
                 GUIContainer(s16 x, s16 y, u16 w, u16 h) : GUIElement(x, y, w, h), curr(nullptr)
                 {
                     
@@ -119,12 +120,25 @@ namespace MM
                     delete i;
                 }
                 
+                virtual void Tick()
+                {
+                    LinkedList<GUIElement*>::LinkedListIterator* i = elems.Iterate();
+                    while(i->avail())
+                    {
+                        GUIElement* e = i->next();
+                        if(!e) continue;
+                        
+                        e->Tick();
+                    }
+                    delete i;
+                }
+                
                 /*virtual void RenderOverlay()
                 {
                     Render();
                 }*/
                 
-                ~GUIContainer()
+                void Clear()
                 {
                     GUIElement* e = nullptr;
                     while(elems.Pull(&e))
@@ -132,6 +146,11 @@ namespace MM
                         if(!e) continue;
                         delete e;
                     }
+                }
+                
+                ~GUIContainer()
+                {
+                    Clear();
                 }
             };
         }

@@ -1,0 +1,205 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+
+#include "consoleshit.h"
+
+#include "leveltools.h"
+}
+
+#include "game/game.hpp"
+#include "game/menu.hpp"
+#include "game/menu/MenuInterface.hpp"
+
+#include "game/menu/gui/GUIButton.hpp"
+#include "game/menu/gui/ScrollableList.hpp"
+
+#include "game/menu/gui/shit/ShitBrowser.hpp"
+
+using MM::Game;
+using MM::GAME::Menu;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::MenuInterface;
+
+using MM::GAME::MENU::GUIButton;
+
+using MM::GAME::MENU::SHIT::ShitBrowser;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            class MenuBrowserDebug : public MenuInterface
+            {
+            public:
+                ShitBrowser* brow;
+                string sel;
+                
+                MenuBrowserDebug() : MenuInterface()
+                {
+                    brow = nullptr;
+                    
+                    elems.Put
+                    (
+                        new GUIButton
+                        (
+                            0, 40, 320, 40, "Push file",
+                            [this](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                if(brow) delete brow;
+                                brow = new ShitBrowser(0);
+                                Game::i->PushMenu(brow);
+                            }
+                        )
+                    );
+                    
+                    elems.Put
+                    (
+                        new GUIButton
+                        (
+                            0, 80, 320, 40, "Push directory",
+                            [this](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                if(brow) delete brow;
+                                brow = new ShitBrowser(1);
+                                Game::i->PushMenu(brow);
+                            }
+                        )
+                    );
+                }
+                
+                void OnActive()
+                {
+                    if(brow)
+                    {
+                        sel = brow->selpath;
+                        if(!sel.length()) sel = "> cancelled selection";
+                        
+                        delete brow;
+                        brow = nullptr;
+                    }
+                    
+                    MenuInterface::OnActive();
+                }
+                
+                void Render()
+                {
+                    Game::i->mono8->RenderString(0, 0, sel.c_str(), 0xFF, 0xFF00);
+                    MenuInterface::Render();
+                }
+            }
+            
+            class MenuDebug : public MenuInterface
+            {
+            private:
+                ScrollableList<GUIButton>* scroll;
+                
+            public:
+                MenuDebug() : MenuInterface()
+                {
+                    scroll = new ScrollableList<GUIButton>(0, 0, 320, 240);
+                    elems.Put(scroll);
+                    auto e = &scroll->elems;
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "SDMC browser test",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                Game::i->PushMenu(new MenuBrowserDebug);
+                            }
+                        )
+                    );
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "crash handler test",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                throw (Result)0xF960D407;
+                            }
+                        )
+                    );
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
+                            0, 0, 320, 48, "cryptotest",
+                            [](GUIButton* dis, s16 x, s16 y) -> void
+                            {
+                                Game* i = Game::i;
+                                
+                                u32 old = *(i->prog->checksum);
+                                i->prog->FixChecksum();
+                                printf("-Progress: %08X %08X\n", old, *(i->prog->checksum));
+                                
+                                u8 slot = 0xFF;
+                                int cy;
+                                for(cy = 0; cy != 220; cy++)
+                                {
+                                    slot = i->prog->slots[cy];
+                                    if(slot == 0xFF) continue;
+                                    
+                                    FSFile* f = nullptr;
+                                    Result res = Game::i->CourseOpen(&f, slot);
+                                    if(res < 0)
+                                    {
+                                        printf("#%03i FAIL: %08X\n", slot, res);
+                                        continue;
+                                    }
+                                    
+                                    u64 size = 0;
+                                    f->size(&size);
+                                    if(size != FILESIZE_COURSE)
+                                    {
+                                        delete f;
+                                        printf("Invalid file size for course%03i: 0x%X != 0x%X\n", slot, size, FILESIZE_COURSE);
+                                        continue;
+                                    }
+                                    u8* bufptr = new u8[FILESIZE_COURSE];
+                                    res = f->read_direct(bufptr, size, 0, nullptr);
+                                    delete f;
+                                    if(res < 0)
+                                    {
+                                        delete bufptr;
+                                        printf("#%03i File FAIL: %08X\n", slot, res);
+                                        continue;
+                                    }
+                                    
+                                    MM_CourseFile* course = (MM_CourseFile*)bufptr;
+                                    
+                                    u32 oldhash = course->hdr.checksum;
+                                    u32 newhash = addcrc((u16*)&course->course, FILESIZE_COURSE - 0x1C, ADDIFF_COURSE);
+                                    
+                                    printf("course%03i: %08X %08X | %08X %08X\n", slot, oldhash, newhash, course->course.crc, ~crc32((u8*)&course->course.f_year, 0x15000 - 0x10, -1U));
+                                    
+                                    delete bufptr;
+                                }
+                            }
+                        )
+                    );
+                }
+                
+                void OnActive()
+                {
+                    consoleClear();
+                    printheader();
+                    
+                    puts("");
+                }
+            };
+        }
+    }
+}

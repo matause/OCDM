@@ -57,6 +57,10 @@ CFLAGS	:=	-g -Wall -O2 -mword-relocations \
 
 CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
 
+ifeq ($(HAPPY),1)
+CFLAGS	+=	-DEPRESSION
+endif
+
 CXXFLAGS	:= $(CFLAGS) -Wno-reorder -fno-rtti -std=gnu++11
 
 ASFLAGS	:=	-g $(ARCH)

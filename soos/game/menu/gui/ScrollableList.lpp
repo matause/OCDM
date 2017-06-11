@@ -145,6 +145,21 @@ namespace MM
                     }
                     delete i;
                 }
+                
+                void Clear()
+                {
+                    T* e = nullptr;
+                    while(elems.Pull(&e))
+                    {
+                        if(!e) continue;
+                        delete e;
+                    }
+                }
+                
+                ~ScrollableList()
+                {
+                    Clear();
+                }
             };
         }
     }

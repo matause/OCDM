@@ -1,0 +1,266 @@
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <math.h>
+
+#include "leveltools.h"
+}
+
+#include <string>
+
+#include "game/game.hpp"
+#include "game/menu/MenuInterface.hpp"
+
+#include "game/menu/gui/GUIElement.hpp"
+#include "game/menu/gui/GUIContainer.hpp"
+#include "game/menu/gui/GUIButton.hpp"
+#include "game/menu/gui/ScrollableList.hpp"
+
+
+using std::string;
+
+using MM::Game;
+using MM::GFX::TextureUnit;
+using MM::GAME::MENU::GUIElement;
+using MM::GAME::MENU::GUIContainer;
+using MM::GAME::MENU::MenuInterface;
+using MM::GAME::MENU::ScrollableList;
+#end
+
+
+namespace MM
+{
+    namespace GAME
+    {
+        namespace MENU
+        {
+            namespace SHIT
+            {
+                template<typename T>
+                class ShitFileButton : public GUIElement
+                {
+                public:
+                    typedef void (*ClickHandlerFunc)(T* wat, ShitFileButton* dis, s16 x, s16 y);
+                    
+                    ClickHandlerFunc clickhandler;
+                    string fn;
+                    T* wat;
+                    int isdir;
+                    
+                    
+                    ShitFileButton(s16 x, s16 y, u16 w, u16 h, const char* fn, T* wat, ClickHandlerFunc clickhandler) : GUIElement(x, y, w, h), clickhandler(clickhandler), fn(fn), wat(wat)
+                    {
+                        int len = strlen(fn);
+                        isdir = len && fn[len - 1] == '/';
+                    }
+                    
+                    virtual void Render(s16 rx, s16 ry)
+                    {
+                        gfxw_fillrect(rx, ry, w, h, isdir ? 0xFF423607 : 0x164BCB);
+                        Game::i->mono8->RenderString(rx + 16, ry + ((h - 8) >> 1), fn.c_str(), 0xFF, 0xA1A193);
+                    }
+                    
+                    virtual void TouchStart(s16 x, s16 y)
+                    {
+                        if(clickhandler) clickhandler(wat, this, x, y);
+                    }
+                };
+                
+                class ShitBrowser : public MenuInterface
+                {
+                public:
+                    string selpath;
+                    
+                private:
+                    ScrollableList<GUIElement>* scroll;
+                    string origpath;
+                    int dirsel;
+                    
+                    int kill;
+                    int refresh;
+                    
+                    void ListList()
+                    {
+                        Clear();
+                        
+                        scroll = new ScrollableList<GUIElement>(0, 0, 320, 240);
+                        elems.Put(scroll);
+                        auto e = &scroll->elems;
+                        
+                        
+                        e->Put
+                        (
+                            new ShitFileButton<ShitBrowser>
+                            (
+                                0, 16, (u16)w, 32, "Cancel selection", this,
+                                [](ShitBrowser* wat, ShitFileButton<ShitBrowser>* dis, s16 x, s16 y)
+                                {
+                                    wat->kill = 1;
+                                }
+                            )
+                        );
+                        
+                        if(dirsel)
+                        e->Put
+                        (
+                            new ShitFileButton<ShitBrowser>
+                            (
+                                0, 0, w, 32, "> Select this directory <", this,
+                                [](ShitBrowser* wat, ShitFileButton<ShitBrowser>* dis, s16 x, s16 y)
+                                {
+                                    wat->selpath = string(Game::i->sdmc->getcwd());
+                                    wat->kill = 1;
+                                }
+                            )
+                        );
+                        
+                        if(*(const u16*)Game::i->sdmc->getcwd() != (u16)'/')
+                        e->Put
+                        (
+                            new ShitFileButton<ShitBrowser>
+                            (
+                                0, 0, w, 32, "^ Up one directory ^", this,
+                                [](ShitBrowser* wat, ShitFileButton<ShitBrowser>* dis, s16 x, s16 y)
+                                {
+                                    Game::i->sdmc->chdir("..");
+                                    wat->refresh = 1;
+                                }
+                            )
+                        );
+                        
+                        char buf[262];
+                        
+                        printf("Loading directory '%s'\n", Game::i->sdmc->getcwd());
+                        
+                        FSDirectory* dir = nullptr;
+                        Result res = Game::i->sdmc->OpenDirectory(&dir);
+                        if(res < 0)
+                        {
+                            
+                            snprintf(buf, 262, "OpenDirectory failed: %08X", res);
+                            puts(buf);
+                            e->Put
+                            (
+                                new ShitFileButton<ShitBrowser>
+                                (
+                                    0, 0, w, 64, buf, this,
+                                    nullptr
+                                )
+                            );
+                            return;
+                        }
+                        
+                        while(!(res = dir->next()))
+                        {
+                            FS_DirectoryEntry dirent = dir->current();
+                            
+                            buf[utf16_to_utf8((u8*)buf, dirent.name, 260)] = '\0';
+                            
+                            if(dirent.attributes & FS_ATTRIBUTE_DIRECTORY)
+                                strcat(buf, "/");
+                            
+                            printf("- %s\n", buf);
+                            e->Put
+                            (
+                                new ShitFileButton<ShitBrowser>
+                                (
+                                    0, 0, w, 32, buf, this,
+                                    [](ShitBrowser* wat, ShitFileButton<ShitBrowser>* dis, s16 x, s16 y)
+                                    {
+                                        if(dis->isdir)
+                                        {
+                                            Game::i->sdmc->chdir(dis->fn.c_str());
+                                            wat->refresh = 1;
+                                            return;
+                                        }
+                                        else if(!wat->dirsel)
+                                        {
+                                            wat->selpath = string(Game::i->sdmc->getcwd()) + dis->fn;
+                                            wat->kill = 1;
+                                        }
+                                    }
+                                )
+                            );
+                        }
+                        
+                        if(res < 0)
+                        {
+                            printf("Failed to read directory fully: %08X\n", res);
+                        }
+                        
+                        delete dir;
+                    }
+                    
+                public:
+                    ShitBrowser(int dirsel) : MenuInterface(), dirsel(dirsel)
+                    {
+                        kill = 0;
+                        refresh = 1;
+                    }
+                    
+                    void Render()
+                    {
+                        MenuInterface::Render();
+                        
+                        Game::i->mono8->RenderString(0, 0, Game::i->sdmc->getcwd(), 0xFF, 0xFF00);
+                    }
+                    
+                    void Tick()
+                    {
+                        if(kill)
+                        {
+                            Game::i->kDown |= KEY_B;
+                            return;
+                        }
+                        
+                        if(refresh)
+                        {
+                            ListList();
+                            refresh = 0;
+                        }
+                    }
+                    
+                    void OnActive()
+                    {
+                        string bak = Game::i->sdmc->getcwd();
+                        Game::i->sdmc->chdir_direct(origpath.c_str());
+                        origpath = bak;
+                        
+                        selpath.clear();
+                        
+                        MenuInterface::OnActive();
+                    }
+                    
+                    void OnDeactive()
+                    {
+                        string bak = Game::i->sdmc->getcwd();
+                        Game::i->sdmc->chdir_direct(origpath.c_str());
+                        origpath = bak;
+                        
+                        MenuInterface::OnDeactive();
+                    }
+                    
+                    int HandleBack()
+                    {
+                        if(kill)
+                        {
+                            Game::i->PopMenu();
+                            return 0;
+                        }
+                        
+                        if(*(const u16*)Game::i->sdmc->getcwd() == (u16)'/')
+                            kill = 1;
+                        else
+                            Game::i->sdmc->chdir("..");
+                        
+                        refresh = 1;
+                        
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -6,6 +6,8 @@ extern "C"
 #include <math.h>
 }
 
+#include <functional>
+
 #include "game/game.hpp"
 
 #include "game/menu/gui/GUIElement.hpp"
@@ -29,12 +31,11 @@ namespace MM
                 
                 
             public:
-                typedef void (*ClickHandlerFunc)(GUIButton* dis, s16 x, s16 y);
                 
-                ClickHandlerFunc clickhandler;
+                std::function<void(GUIButton* dis, s16 x, s16 y)> clickhandler;
                 
                 
-                GUIButton(s16 x, s16 y, u16 w, u16 h, char* label, ClickHandlerFunc clickhandler) : GUIElement(x, y, w, h), clickhandler(clickhandler)
+                GUIButton(s16 x, s16 y, u16 w, u16 h, const char* label, std::function<void(GUIButton* dis, s16 x, s16 y)> clickhandler) : GUIElement(x, y, w, h), clickhandler(clickhandler)
                 {
                     strncpy(text, label, 256);
                 }

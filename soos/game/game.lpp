@@ -9,6 +9,11 @@ namespace MM
         class FontManager;
     }
     
+    namespace GAME
+    {
+        class Menu;
+    }
+    
     /*
     namespace SND
     {
@@ -22,6 +27,7 @@ extern "C"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <malloc.h>
 
 #include "leveltools.h"
 }
@@ -33,6 +39,7 @@ extern "C"
 //#include "sound/sndmgr.hpp"
 #include "fs/lppfs.hpp"
 #include "shit.hpp"
+#include "misc/ini.hpp"
 
 
 using MM::GAME::Menu;
@@ -45,6 +52,8 @@ using MM::FS::FSFile;
 using MM::FS::FSDirectory;
 
 using MM::SHIT::Progress;
+
+using MM::Ini;
 
 #define FPSNO 60
 #end
@@ -92,7 +101,7 @@ namespace MM
          */
         touchPosition& touch;
         
-        //lua_State* L;
+        Ini& ini;
         
         /**
          * Texture manager instance
@@ -157,15 +166,15 @@ namespace MM
         /**
          * Level slots
          */
-        LevelEntry* slots[221];
+        LevelEntry* slots[220];
         
         
         
         /**
          * Game constructor (don't use it!) 
          */
-        Game(u32& kDown, u32& kHeld, u32& kUp, circlePosition& cpos, touchPosition& touch, u64 ext, u64 sav, Handle fsu)
-        : kDown(kDown), kHeld(kHeld), kUp(kUp), cpos(cpos), touch(touch), tick(0), mono8(nullptr), fps(0.0F), sdmc(nullptr), extdata(nullptr), save(nullptr), prog(nullptr), extid(ext), saveid(sav)
+        Game(u32& kDown, u32& kHeld, u32& kUp, circlePosition& cpos, touchPosition& touch, u64 ext, u64 sav, Handle fsu, Ini& ini)
+        : kDown(kDown), kHeld(kHeld), kUp(kUp), cpos(cpos), touch(touch), tick(0), mono8(nullptr), fps(0.0F), sdmc(nullptr), extdata(nullptr), save(nullptr), prog(nullptr), extid(ext), saveid(sav), ini(ini)
         {
             i = this;
             this->fsu = fsu;
@@ -232,37 +241,29 @@ namespace MM
             {
                 int i;
                 u8 bufptr[0x100];
-                char buf[0x10];
                 
                 for(i = 0; i != 220; i++)
                 {
                     u8 slot = prog->slots[i];
                     
-                    if(slot == 0xFF)
-                    {
-                        slots[i] = nullptr;
-                    }
-                    else
-                    {
-                        snprintf(buf, 0x10, "course%03i", slot);
-                        printf("[GAME] Opening /%s\n", buf);
-                        FSFile* f = nullptr;
-                        res = extdata->OpenFile(&f, buf, FS_OPEN_READ);
-                        if(res < 0) throw res;
-                        
-                        res = f->read_direct(bufptr, 0x100, 0, nullptr);
-                        delete f;
-                        
-                        LevelEntry* le = new LevelEntry;
-                        memset(le, 0, sizeof(*le));
-                        lt_parsele(le, slot, bufptr);
-                        
-                        slots[i] = le;
-                    }
+                    slots[i] = nullptr;
+                    
+                    if(slot == 0xFF) continue;
+                    
+                    FSFile* f = nullptr;
+                    res = CourseOpen(&f, slot);
+                    if(res < 0) throw res;
+                    
+                    res = f->read_direct(bufptr, 0x100, 0, nullptr);
+                    delete f;
+                    if(res < 0) continue;
+                    
+                    LevelEntry* le = new LevelEntry;
+                    memset(le, 0, sizeof(*le));
+                    lt_parsele(le, slot, bufptr);
+                    
+                    slots[i] = le;
                 }
-                
-                slots[220] = new LevelEntry;
-                lt_parsele(slots[220], 220, nullptr); //TODO: undummy
             }
             while(0);
             
@@ -279,6 +280,11 @@ namespace MM
             
             u32 savesize = 0;
             savedata->size(&savesize);
+            if(savesize != FILESIZE_PROGRESS)
+            {
+                delete savedata;
+                return -1;
+            }
             u8* bufptr = new u8[savesize];
             savedata->read_direct(bufptr, savesize, 0, nullptr);
             if(prog) delete prog;
@@ -297,14 +303,171 @@ namespace MM
             Result res = save->OpenFile(&savedata, "Progress", FS_OPEN_WRITE);
             if(fsu) fsEndUseSession();
             if(res < 0) return res;
-            
-            u32 savesize = 0;
-            savedata->size(&savesize);
-            savedata->write_direct(prog->bufptr, savesize, 0, nullptr);
+            prog->FixChecksum();
+            savedata->write_direct(prog->bufptr, FILESIZE_PROGRESS, 0, nullptr);
             savedata->flush();
             delete savedata;
             
+            if(fsu) fsUseSession(fsu);
+            save->CommitSavedata();
+            if(fsu) fsEndUseSession();
+            
+            res = CourseOpen(&savedata, 220);
+            if(res < 0)
+            {
+                printf("Failed to fix course220: %08X\n", res);
+            }
+            else
+            {
+                u8* buf = new u8[FILESIZE_DUMMY];
+                res = savedata->read_direct(buf, FILESIZE_DUMMY, 0, nullptr);
+                if(res < 0)
+                {
+                    printf("Failed to read course220: %08X\n", res);
+                }
+                else
+                {
+                    memcpy(buf + 0x2C, prog->slots, 220);
+                    *(u32*)(buf + 0x24) = ~crc32(buf + 0x2C, 0x1C00 - 0x10, -1U);
+                    *(u32*)buf = addcrc((u16*)(buf + 0x1C), 0x1C00, ADDIFF_DUMMY);
+                    savedata->write_direct(buf, FILESIZE_DUMMY, 0, nullptr);
+                    savedata->flush();
+                }
+                
+                delete savedata;
+            }
+            
             return 0;
+        }
+        
+        Result CourseOpen(FSFile** f, u8 nth)
+        {
+            char buf[0x10];
+            snprintf(buf, 0x10, "course%03i", nth);
+            return extdata->OpenFile(f, buf, FS_OPEN_READ | FS_OPEN_WRITE);
+        }
+        
+        u8 FindNextFile(u8 start = 0)
+        {
+            u8 ret = 0xFF;
+            
+            FSFile* f = nullptr;
+            u64 buf[2];
+            Result res = 0;
+            
+            for(u8 i = start; i < 220; i++)
+            {
+                res = CourseOpen(&f, i);
+                if(res < 0) continue;
+                
+                res = f->read_direct(buf, sizeof(buf), 0, nullptr);
+                delete f;
+                
+                if(buf[0] || buf[1]) continue;
+                
+                ret = i;
+                break;
+            }
+            
+            return ret;
+        }
+        
+        Result CourseImportCTR(u8 slot, MM_CourseFile* fil)
+        {
+            printf("Course checksum: %08X ", fil->course.crc);
+            lt_mkle(&fil->course);
+            printf("%08X\n", fil->course.crc);
+            
+            printf("Subcourse checksum: %08X ", fil->subcourse.crc);
+            lt_mkle(&fil->subcourse);
+            printf("%08X\n", fil->subcourse.crc);
+            
+            
+            printf("Thumbnail checksum: %08X ", *(u32*)fil->dummy_thumbnail);
+            *(u32*)fil->dummy_thumbnail = ~crc32(fil->dummy_thumbnail + 4, 0x157C0 - 4, -1U);
+            printf("%08X\n", *(u32*)fil->dummy_thumbnail);
+            
+            printf("Magic0: %08X ", fil->hdr.checksum);
+            
+            memcpy(&fil->hdr.LockoutID, prog->bufptr + 0x10, 0x8);
+            //memcpy(&fil->hdr, prog->bufptr, 0x18);
+            
+            fil->hdr.checksum = addcrc((u16*)&fil->course, FILESIZE_COURSE - 0x1C, ADDIFF_COURSE);
+            printf("%08X\n", fil->hdr.checksum);
+            
+            //TODO: do I need to fix *anything* else?
+            
+            u8 nth = prog->slots[slot];
+            
+            if(nth == 0xFF) nth = FindNextFile();
+            if(nth == 0xFF) return -1;
+            
+            FSFile* f = nullptr;
+            Result res = 0;
+            
+            char buf[0x10];
+            snprintf(buf, 0x10, "course%03i", nth);
+            printf("%s:\n", buf);
+            
+            
+            res = extdata->rmfile(buf);
+            printf("- rmfile %08X\n", res);
+            if(res < 0) return res;
+            
+            res = extdata->mkfile(buf, FILESIZE_COURSE);
+            printf("- mkfile %08X\n", res);
+            if(res < 0) return res;
+            
+            res = CourseOpen(&f, nth);
+            if(res < 0) return res;
+            
+            u32 nrw = 0;
+            res = f->write_direct((u8*)fil, FILESIZE_COURSE, 0, &nrw);
+            if(res >= 0) f->flush();
+            delete f;
+            if(res < 0) return res;
+            
+            if(nrw != FILESIZE_COURSE)
+            {
+                printf("- write invalid size 0x%X != 0x%X\n", nrw, FILESIZE_COURSE);
+                return -2;
+            }
+            
+            prog->slots[slot] = nth;
+            
+            res = ProgressSave();
+            if(res < 0) return res;
+            
+            if(slots[slot]) delete slots[slot];
+            LevelEntry* le = new LevelEntry;
+            memset(le, 0, sizeof(*le));
+            lt_parsele(le, slot, (u8*)fil);
+            slots[slot] = le;
+            
+            return 0;
+        }
+        
+        Result CourseImportWUP(u8 slot, MM_CourseFile* fil)
+        {
+            FSFile* f = nullptr;
+            u8 nth = prog->slots[slot];
+            Result res = CourseOpen(&f, nth);
+            if(res < 0) return res;
+            
+            res = f->read_direct((u8*)fil, 0x1C, 0, nullptr);
+            res = f->read_direct((u8*)fil->course.unknown0, 0x18, 0x1C + 0xD4, nullptr);
+            res = f->read_direct((u8*)fil->course.unknown_padding, 0xD0, 0x1C + 0x14F50, nullptr);
+            res = f->read_direct((u8*)fil->subcourse.unknown0, 0x18, 0x15000 + 0x1C + 0xD4, nullptr);
+            res = f->read_direct((u8*)fil->subcourse.unknown_padding, 0xD0, 0x15000 + 0x1C + 0x14F50, nullptr);
+            res = f->read_direct((u8*)fil->dummy_thumbnail, 0x157C0 + 0x3390, 0x2A000 + 0x1C, nullptr);
+            delete f;
+            
+            //memset(&fil->dummy_thumbnail, 0, 0x157C0);
+            //u32* ptr = fil->dummy_padding;
+            //int i = 0xCE4;
+            //while(i--) *(ptr++) = 0xCAFEBADD;
+            
+            return CourseImportCTR(slot, fil);
         }
         
         /**
@@ -359,6 +522,13 @@ namespace MM
             gfxw_startscreen(1);
             
             if(menu) menu->Render();
+            
+            /*char buf[40];
+            struct mallinfo meminf = mallinfo();
+            
+            snprintf(buf, 40, "mem: 0x%08X / 0x%08X", meminf.fordblks, meminf.uordblks);
+            mono8->RenderString(3, 3, buf, 0xAC, 0x44);
+            mono8->RenderString(2, 2, buf, 0xFF, 0x88);*/
             
             gfxw_endscreen();
         }

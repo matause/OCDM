@@ -1,0 +1,251 @@
+/*
+    ini.hpp - MarcusD's minimalistic INI parser
+    Copyright (C) 2017 MarcusD (https://github.com/MarcuzD)
+    
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#hdr
+#include <3ds.h>
+
+extern "C"
+{
+#include <stdio.h> 
+#include <stdlib.h>
+#include <string.h>
+}
+
+#include <string>
+#include <iostream>
+#include <istream>
+#include <ostream>
+#include <map>
+
+
+using std::map;
+using std::string;
+using std::istream;
+using std::ostream;
+using std::endl;
+
+#end
+
+static const char* hex = "0123456789ABCDEF";
+static const char* num = "\0\x01\x02\x03\x04\x05\x06\x07\x08\x09\0\0\0\0\0\0\0\x0A\x0B\x0C\x0D\x0E\x0F\0\0\0\0\0\0\0\0\0\0";
+
+namespace MM
+{
+    class Ini
+    {
+    public:
+        class IniSection
+        {
+            map<string, string> elem;
+        
+        public:
+            string& Get(string k)
+            {
+                return elem[k];
+            }
+            
+            uint32_t GetBinary(string k, void* ptr, uint32_t maxlen)
+            {
+                string& str = Get(k);
+                uint32_t remain = str.length() >> 1;
+                
+                if(maxlen < remain) remain = maxlen;
+                
+                uint8_t* s = (uint8_t*)str.c_str();
+                uint8_t* d = (uint8_t*)ptr;
+                
+                uint32_t i = 0;
+                while((i++) != remain)
+                {
+                    char c1 = num[((*(s++) & 0x1F) ^ 0x10)] << 4;
+                    char c2 = num[((*(s++) & 0x1F) ^ 0x10)];
+                    
+                    *(d++) = c1 | c2;
+                }
+                
+                return remain;
+            }
+            
+            string GetBinaryString(string k)
+            {
+                string& str = Get(k);
+                uint32_t siz = str.length() >> 1;
+                
+                u8* ptr = new u8[siz];
+                
+                siz = GetBinary(k, ptr, siz);
+                
+                string ret;
+                ret.assign((char*)ptr, siz);
+                
+                delete[] ptr;
+                
+                return ret;
+            }
+            
+            void PutBinary(string k, const void* ptr, uint32_t len)
+            {
+                len <<= 1;
+                
+                const uint8_t* _1 = (const uint8_t*)ptr;
+                
+                string str;
+                str.resize(len, '0');
+                
+                uint32_t i = 0;
+                
+                while(i != len)
+                {
+                    const char c = *(_1++) & 0xFF;
+                    
+                    str[i++] = hex[((c >> 4) & 0xF)];
+                    str[i++] = hex[(c & 0xF)];
+                }
+                
+                Get(k) = str;
+            }
+            
+            void PutBinaryString(string k, string v)
+            {
+                PutBinary(k, v.c_str(), v.length());
+            }
+            
+            bool Haz(string k)
+            {
+                return elem.count(k) != 0;
+            }
+            
+            void Delet(string k)
+            {
+                if(!Haz(k)) return;
+                elem.erase(k);
+            }
+            
+            void Reset()
+            {
+                elem.clear();
+            }
+            
+            string& operator[](string k)
+            {
+                return Get(k);
+            }
+            
+            friend ostream& operator <<(ostream& os, const IniSection& sect);
+        };
+        
+        IniSection& Get(string k)
+        {
+            return container[k];
+        }
+        
+        bool Haz(string k)
+        {
+            return container.count(k) != 0;
+        }
+        
+        void Delet(string k)
+        {
+            if(!Haz(k)) return;
+            
+            container[k].Reset();
+            container.erase(k);
+        }
+        
+        void Reset()
+        {
+            for(auto kv : container)
+                kv.second.Reset();
+            
+            container.clear();
+        }
+        
+        IniSection& operator[](string k)
+        {
+            return Get(k);
+        }
+        
+        friend ostream& operator <<(ostream& os, const Ini& ini);
+        friend istream& operator >>(istream& is, Ini& ini);
+        
+    private:
+        map<string, IniSection> container;
+    };
+    
+    ostream& operator <<(ostream& os, const Ini::IniSection& sect)
+    {
+        for(auto kv : sect.elem)
+            os << kv.first << '=' << kv.second << endl;
+        
+        return os;
+    }
+    
+    ostream& operator <<(ostream& os, const Ini& ini)
+    {
+        for(auto kv : ini.container)
+            os << '[' << kv.first << ']' << endl << kv.second << endl;
+        
+        return os;
+    }
+    
+    istream& operator >>(istream& is, Ini& ini)
+    {
+        Ini::IniSection* sect = nullptr;
+        
+        int i = 0;
+        
+        string str;
+        while(std::getline(is, str))
+        {
+            i++;
+            
+            if(str[0] == '\0' || str[0] == '\r' || str[0] == '#' || str[0] == ' ') continue;
+            
+            if(str[0] == '[')
+            {
+                int len = str.find(']', 1) + 1;
+                if(len < 2)
+                {
+                    std::cerr << "INI ERROR on line " << i << ", unfinished section bracket!" << endl;
+                    continue;
+                }
+                
+                sect = &ini[str.substr(1, len - 2)];
+            }
+            else
+            {
+                if(!sect)
+                {
+                    std::cerr << "INI ERROR on line " << i << ", data before section start!" << endl;
+                    continue;
+                }
+                
+                int pos = str.find('=');
+                if(pos < 0)
+                {
+                    std::cerr << "INI ERROR on line " << i << ", uncommented data without assignment!" << endl;
+                    continue;
+                }
+                
+                (*sect)[str.substr(0, pos)] = str.substr(pos + 1, str.length() - pos - 1);
+            }
+        }
+        
+        return is;
+    }
+}

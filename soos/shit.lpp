@@ -1,6 +1,10 @@
 #hdr
 #include <3ds.h>
 
+extern "C"
+{
+#include "leveltools.h"
+}
 #end
 
 
@@ -30,6 +34,11 @@ namespace MM
             ~Progress()
             {
                 delete[] bufptr;
+            }
+            
+            void FixChecksum()
+            {
+                *checksum = addcrc((u16*)(bufptr + 0x18), FILESIZE_PROGRESS - 0x18, ADDIFF_PROGRESS);
             }
         };
     }

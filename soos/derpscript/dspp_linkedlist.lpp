@@ -25,10 +25,11 @@ namespace MM
             
             void Destruct(LinkedNode* curr)
             {
-                if(curr)
+                while(curr)
                 {
-                    if(curr->next) Destruct(curr->next);
+                    LinkedNode* next = curr->next;
                     delete curr;
+                    curr = next;
                 }
             }
         public:
@@ -63,13 +64,7 @@ namespace MM
             
             ~LinkedList()
             {
-                LinkedNode* n = root;
-                while(n)
-                {
-                    LinkedNode* delet = n;
-                    n = n->next;
-                    delete delet;
-                }
+                Destruct(root);
             }
             
             u32 cnt()

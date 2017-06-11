@@ -4,6 +4,7 @@
 extern "C"
 {
 #include <math.h>
+#include <time.h>
 
 #include "consoleshit.h"
 }
@@ -16,6 +17,11 @@ extern "C"
 #include "game/menu/gui/ScrollableList.hpp"
 
 #include "game/menu/MenuCourseLocal.hpp"
+#include "game/menu/MenuDebug.hpp"
+
+#ifdef EPRESSION
+#include "lookatthis/net.hpp"
+#endif
 
 using MM::Game;
 using MM::GAME::Menu;
@@ -25,6 +31,10 @@ using MM::GAME::MENU::MenuInterface;
 using MM::GAME::MENU::GUIButton;
 
 using MM::GAME::MENU::MenuCourseLocal;
+
+#ifdef EPRESSION
+#include MM::NET::GUI::NetMenu;
+#endif
 #end
 
 
@@ -50,10 +60,10 @@ namespace MM
                     (
                         new GUIButton
                         (
-                            0, 0, 320, 48, "crash test",
+                            0, 0, 320, 48, "debug menu",
                             [](GUIButton* dis, s16 x, s16 y) -> void
                             {
-                                throw 56;
+                                Game::i->PushMenu(new MM::GAME::MENU::MenuDebug);
                             }
                         )
                     );
@@ -62,7 +72,7 @@ namespace MM
                     (
                         new GUIButton
                         (
-                            0, 0, 320, 48, "Local data management",
+                            0, 0, 320, 48, "Course list",
                             [](GUIButton* dis, s16 x, s16 y) -> void
                             {
                                 Game::i->PushMenu(new MM::GAME::MENU::MenuCourseLocal);
@@ -74,10 +84,153 @@ namespace MM
                     (
                         new GUIButton
                         (
+                            0, 0, 320, 48, "Savedata management",
+                            [](GUIButton* dis, s16 x, s16 y)
+                            {
+                                MenuInterface* m = new MenuInterface;
+                                
+                                m->elems.Put
+                                (
+                                    new GUIButton
+                                    (
+                                        0, 200, 320, 40, "Make save snapshot",
+                                        [](GUIButton* dis, s16 x, s16 y)
+                                        {
+                                            SwkbdState swkbd;
+                                            char textbuf[262];
+                                            memset(textbuf, 0, sizeof(textbuf));
+                                            swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 2, 262);
+                                            do
+                                            {
+                                                time_t t;
+                                                time(&t);
+                                                struct tm* ti = localtime(&t);
+                                                strftime(textbuf, 262, "%Y%m%d_%H%M%S", ti);
+                                            }
+                                            while(0);
+                                            swkbdSetInitialText(&swkbd, textbuf);
+                                            if(swkbdInputText(&swkbd, textbuf, 32) != SWKBD_BUTTON_RIGHT) return;
+                                            if(!strlen(textbuf)) return;
+                                            
+                                            Game::i->sdmc->chdir("snapshot");
+                                            Result res = Game::i->sdmc->mkdir(textbuf);
+                                            if(res)
+                                            {
+                                                printf("Failed to create save directory: %08X%s\n", res, res < 0 ? "" : "\nThis is not an error, but exporting was stopped for safety reasons");
+                                                return;
+                                            }
+                                            
+                                            Game::i->sdmc->chdir(textbuf);
+                                            
+                                            puts("\nExporting, please wait!");
+                                            
+                                            FSFile* f = nullptr;
+                                            
+                                            res = Game::i->sdmc->OpenFile(&f, "Progress", FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                            if(res < 0)
+                                            {
+                                                printf("Failed to open/create file 'Progress': %08X\n", res);
+                                            }
+                                            else
+                                            {
+                                                res = f->write_direct(Game::i->prog->bufptr, FILESIZE_PROGRESS, 0, nullptr);
+                                                if(res < 0) printf("Failed to write file 'Progress': %08X\n", res);
+                                                else f->flush();
+                                                
+                                                delete f;
+                                            }
+                                            
+                                            u8* buf = new u8[FILESIZE_COURSE];
+                                            
+                                            char fbuf[10];
+                                            
+                                            u32 numread = 0;
+                                            
+                                            for(u8 i = 0; i != 221; i++)
+                                            {
+                                                res = Game::i->CourseOpen(&f, i);
+                                                if(res < 0)
+                                                {
+                                                    printf("Failed to open course %03i: %08X\n", i, res);
+                                                    continue;
+                                                }
+                                                
+                                                res = f->read_direct(buf, FILESIZE_COURSE, 0, &numread);
+                                                delete f;
+                                                if(res < 0)
+                                                {
+                                                    if(res != 0xD900458B) printf("Failed to read course %03i: %08X\n", i, res);
+                                                    continue;
+                                                }
+                                                
+                                                if(numread != FILESIZE_COURSE && numread != FILESIZE_DUMMY)
+                                                {
+                                                    printf("Size mismatch for course %03i: 0x%X is not right\n", i, numread);
+                                                    continue;
+                                                }
+                                                
+                                                snprintf(fbuf, 10, "course%03i", i);
+                                                res = Game::i->sdmc->OpenFile(&f, fbuf, FS_OPEN_WRITE | FS_OPEN_CREATE);
+                                                if(res < 0)
+                                                {
+                                                    printf("Failed to open/create file for course %03i: %08X\n", i, res);
+                                                    continue;
+                                                }
+                                                
+                                                res = f->write_direct(buf, numread, 0, nullptr);
+                                                if(res >= 0) f->flush();
+                                                delete f;
+                                                if(res < 0)
+                                                {
+                                                    printf("Failed to write course %03i: %08X\n", i, res);
+                                                }
+                                            }
+                                            
+                                            puts("Export finished >:3\n");
+                                            
+                                            Game::i->sdmc->chdir("../..");
+                                        }
+                                    )
+                                );
+                                
+                                
+                                Game::i->PushMenu(m);
+                            }
+                        )
+                    );
+                    
+                    e->Put
+                    (
+                        new GUIButton
+                        (
                             0, 0, 320, 48, "Online Course Database",
                             [](GUIButton* dis, s16 x, s16 y) -> void
                             {
-                                throw 56;
+#ifdef EPRESSION
+                                Game::i->PushMenu(new NetMenu);
+                                return;
+#endif
+                                
+                                MenuInterface* m = new MenuInterface;
+                                
+                                m->elems.Put
+                                (
+                                    new GUIButton
+                                    (
+                                        0, 0, 320, 240,
+                                        /*"I also wish I wouldn't be a lazy fuck,\n"\
+                                        "      but it can't be helped :/\n\n"\*/
+                                        "    Press B or the screen to cry    "\
+                                        ,
+                                        [](GUIButton* dis, s16 x, s16 y)
+                                        {
+                                            //???
+                                            Game::i->kDown |= KEY_B;
+                                        }
+                                    )
+                                );
+                                
+                                Game::i->PushMenu(m);
                             }
                         )
                     );
@@ -90,10 +243,11 @@ namespace MM
                     
                     printf("\n\n\nC%cedits:\n\n\n", ((svcGetSystemTick() >> 1) & 0xF) ? 'r' : 'l');
                     
-                    puts("Sonomi-nyan~ :<     -- programmer / REer");
-                    puts("smb123w64gb         -- original save conversion code");
+                    puts("Sono                -- programmer / REer");
+                    puts("smb123w64gb         -- file format documentation");
                     puts("CeeDee @ GBATemp    -- application logo");
-                    puts("SomeGamer @ GBATemp -- course LockoutID \"exploit\"");
+                    puts("Kallus @ GBATemp    -- banner artwork");
+                    puts("SomeGamer @ GBATemp -- LockoutID oversight");
                 }
             };
         }

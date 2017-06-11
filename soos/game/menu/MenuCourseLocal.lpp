@@ -49,79 +49,6 @@ namespace MM
                     elems.Put(scroll);
                     auto e = &scroll->elems;
                     
-                    e->Put
-                    (
-                        new GUIButton
-                        (
-                            0, 0, 320, 48, "Export all courses",
-                            [](GUIButton* dis, s16 x, s16 y) -> void
-                            {
-                                Result res = 0;
-                                char buf[0x80];
-                                
-                                u8 slot = 0xFF;
-                                int cy;
-                                for(cy = 0; cy != 220; cy++)
-                                {
-                                    slot = Game::i->prog->slots[cy];
-                                    if(slot == 0xFF) continue;
-                                    
-                                    snprintf(buf, sizeof(buf), "course%03i", slot);
-                                    FSFile* f = nullptr;
-                                    res = Game::i->extdata->OpenFile(&f, buf, FS_OPEN_READ);
-                                    if(res < 0)
-                                    {
-                                        printf("#%03i FAIL: %08X\n", slot, res);
-                                        continue;
-                                    }
-                                    
-                                    u64 size = 0;
-                                    f->size(&size);
-                                    u8* bufptr = new u8[size];
-                                    res = f->read_direct(bufptr, size, 0, nullptr);
-                                    delete f;
-                                    if(res < 0)
-                                    {
-                                        delete[] bufptr;
-                                        printf("#%03i File FAIL: %08X\n", slot, res);
-                                    }
-                                    
-                                    FSFile* fo = nullptr;
-                                    
-                                    snprintf(buf, sizeof(buf), "export/course%03i", slot);
-                                    res = Game::i->sdmc->OpenFile(&fo, buf, FS_OPEN_WRITE | FS_OPEN_CREATE);
-                                    if(res < 0)
-                                    {
-                                        printf("#03i SDMC export FAIL: %08X\n", slot, res);
-                                    }
-                                    else
-                                    {
-                                        fo->write_direct(bufptr, size, 0, nullptr);
-                                        fo->flush();
-                                        delete fo;
-                                        fo = nullptr;
-                                    }
-                                    
-                                    snprintf(buf, sizeof(buf), "export/course%03i_thumbnail.bin", slot);
-                                    res = Game::i->sdmc->OpenFile(&fo, buf, FS_OPEN_WRITE | FS_OPEN_CREATE);
-                                    if(res < 0)
-                                    {
-                                        printf("#03i SDMC thumbnail export FAIL: %08X\n", slot, res);
-                                    }
-                                    else
-                                    {
-                                        fo->write_direct(bufptr + 0x2A01C, 0x157C0, 0, nullptr);
-                                        fo->flush();
-                                        delete fo;
-                                        fo = nullptr;
-                                    }
-                                    
-                                    delete[] bufptr;
-                                }
-                            }
-                        )
-                    );
-                    
                     int i;
                     for(i = 0; i != 55; i++)
                     {
@@ -144,7 +71,7 @@ namespace MM
                         if(wat->selected)
                         {
                             wat->selected->open = 0;
-                            wat->selected->le = nullptr;
+                            wat->selected->btn = nullptr;
                         }
                     }
                     
