@@ -207,10 +207,6 @@ namespace MM
             if(res < 0) throw res;
             sdmc->chdir("OCDM");
             
-            puts("[GAME] Initializing ExtData");
-            res = FSSession::OpenExtdata(&extdata, extid);
-            if(res < 0) throw res;
-            
             if(envIsHomebrew())
             {
                 fsUseSession(fsu);
@@ -229,8 +225,38 @@ namespace MM
                 *(u64*)(&path[1]) = saveid;
                 puts("[GAME] Initializing Savedata");
                 res = FSSession::OpenSession(&save, ARCHIVE_USER_SAVEDATA, {PATH_BINARY, 0xC, path});
-                if(res < 0) throw res;
+                if(res < 0)
+                {
+                    if(res != 0xC8804478) throw res;
+                    puts("[GAME] Checking game cart");
+                    u32 succ = 0;
+                    u64 tid = 0ULL;
+                    res = AM_GetTitleList(&succ, MEDIATYPE_GAME_CARD, 1, &tid);
+                    if(res < 0) throw res;
+                    if(!succ)
+                    {
+                        puts("[GAME] No gamecart inserted");
+                        throw (Result)0xF00FCACE;
+                    }
+                    char prod[16];
+                    res = AM_GetTitleProductCode(MEDIATYPE_GAME_CARD, 0ULL, prod);
+                    if(res < 0) throw res;
+                    if(strncmp(prod + 6, "AJP", 3))
+                    {
+                        printf("[GAME] Game cart '%s' is not Mario Maker", prod);
+                        throw (Result)0xF00FCACE;
+                    }
+                    path[0] = MEDIATYPE_GAME_CARD;
+                    *(u64*)(&path[1]) = 0ULL;
+                    res = FSSession::OpenSession(&save, ARCHIVE_USER_SAVEDATA, {PATH_BINARY, 0xC, path});
+                    if(res < 0) throw res;
+                    extid = (tid >> 8) & 0xFFFFFF;
+                }
             }
+            
+            puts("[GAME] Initializing ExtData");
+            res = FSSession::OpenExtdata(&extdata, extid);
+            if(res < 0) throw res;
             
             puts("[GAME] Loading Savedata");
             res = ProgressLoad();
