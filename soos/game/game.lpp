@@ -241,7 +241,7 @@ namespace MM
                     char prod[16];
                     res = AM_GetTitleProductCode(MEDIATYPE_GAME_CARD, 0ULL, prod);
                     if(res < 0) throw res;
-                    if(strncmp(prod + 6, "AJP", 3))
+                    if(strncmp(prod + 6, "AJH", 3))
                     {
                         printf("[GAME] Game cart '%s' is not Mario Maker", prod);
                         throw (Result)0xF00FCACE;
