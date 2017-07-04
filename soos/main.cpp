@@ -115,6 +115,7 @@ int main()
     // =====[PROGINIT]=====
     
     gfxw_init();
+    amInit();
     
     // =====[VARS]=====
     
@@ -342,6 +343,7 @@ int main()
         svcCloseHandle(fsu);
     }
     
+    amExit();
     gfxw_exit();
     
     return 0;
