@@ -42,24 +42,35 @@ void lt_chend(MM_Course* course)
     
     memset(&course->unk_zero, 0, 4);
     memset(&course->padding_zero0, 0, 4);
-    memset(&course->padding_zero1, 0, 0x12);
+    memset(&course->padding_zero1, 0, 4);
     memset(&course->padding_zero2, 0, 1);
-    memset(&course->padding_zero3, 0, 2);
     
     SWAP32(0x04);
     SWAP16(0x10);
+    SWAP16(0x16);
+    SWAP32(0x1C);
+    
+    do
+    {
+        u16 tmp = *(u16*)(bufptr + 0x20);
+        *(u16*)(bufptr + 0x20) = *(u16*)(bufptr + 0x22);
+        *(u16*)(bufptr + 0x22) = tmp;
+    }
+    while(0);
     
     //memset(bufptr + 0x16, 0, 0x12);
     
     for(i = 0x28; i != 0x6A; i += 2)
         SWAP16(i);
     
-    //SWAP16(0x6A); //this is a string, you silly fuck
     SWAP16(0x70);
     SWAP32(0x74);
     
-    //memset(bufptr + 0x78, 0, 0x74); //Mii
+    memset(bufptr + 0x78, 0, 0x74); //Mii
     
+    SWAP32(0xD8);
+    SWAP32(0xDC);
+    //SWAP32(0xE8);
     SWAP32(0xEC);
     
     for(i = 0xF0; i != 0x145F0; i += 0x20)
@@ -69,18 +80,19 @@ void lt_chend(MM_Course* course)
         SWAP16(i + 0x8);
         SWAP32(i + 0xC);
         SWAP32(i + 0x10);
-        SWAP32(i + 0x14);
+        SWAP16(i + 0x14);
+        SWAP16(i + 0x16);
         SWAP16(i + 0x1A);
         SWAP16(i + 0x1C);
     }
     
-    /*for(i = 0x145F0; i != 0x14F50; i += 8)
+    for(i = 0x145F0; i != 0x14F50; i += 8)
     {
-        
-        //SWAP16(i + 2);
-        //SWAP16(i + 6);
-    }*/
-    MM_Effect sfx;
+        SWAP16(i + 2);
+        SWAP16(i + 6);
+    }
+    
+    /*MM_Effect sfx;
     sfx.type = 0xFF;
     sfx.unknown0 = 0xFF;
     sfx.subtype = 0;
@@ -93,16 +105,16 @@ void lt_chend(MM_Course* course)
     for(i = 0; i != 300; i++)
     {
         memcpy(&course->sfx[i], &sfx, 8);
-    }
+    }*/
     
-    memset(bufptr + 0x145F0, 0, 300 * 8);
+    //memset(bufptr + 0x145F0, 0, 300 * 8);
     
     //SWAP32(0x14F50);
     //SWAP32(0x14F54);
     //SWAP32(0x14F58);
     //SWAP32(0x14F5C);
     
-    //memset(bufptr + 0x14F50, 0, 0xB0);
+    memset(bufptr + 0x14F50, 0, 0xB0);
 }
 
 void lt_mkle(MM_Course* course)

@@ -142,7 +142,7 @@ int main()
     
     Handle fsu = 0;
     
-    u64 vl_eid[] = {0x1A03, 0x1A04, 0x1A05};
+    u64 vl_eid[] = {0x1A03, 0x1A04, 0x1A05, 0x1BB8};
     
     // =====[PREINIT]=====
     

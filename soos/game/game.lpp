@@ -481,12 +481,17 @@ namespace MM
             if(res < 0) return res;
             
             res = f->read_direct((u8*)fil, 0x1C, 0, nullptr);
-            res = f->read_direct((u8*)fil->course.unknown0, 0x18, 0x1C + 0xD4, nullptr);
-            res = f->read_direct((u8*)fil->course.unknown_padding, 0xD0, 0x1C + 0x14F50, nullptr);
-            res = f->read_direct((u8*)fil->subcourse.unknown0, 0x18, 0x15000 + 0x1C + 0xD4, nullptr);
-            res = f->read_direct((u8*)fil->subcourse.unknown_padding, 0xD0, 0x15000 + 0x1C + 0x14F50, nullptr);
-            res = f->read_direct((u8*)fil->dummy_thumbnail, 0x157C0 + 0x3390, 0x2A000 + 0x1C, nullptr);
+            //res = f->read_direct((u8*)fil->course.unknown0, 0x18, 0x1C + 0xD4, nullptr);
+            //res = f->read_direct((u8*)fil->course.unknown_padding, 0xD0, 0x1C + 0x14F50, nullptr);
+            //res = f->read_direct((u8*)fil->subcourse.unknown0, 0x18, 0x15000 + 0x1C + 0xD4, nullptr);
+            //res = f->read_direct((u8*)fil->subcourse.unknown_padding, 0xD0, 0x15000 + 0x1C + 0x14F50, nullptr);
+            res = f->read_direct((u8*)fil->dummy_thumbnail, 0x157C0 + 0x3390, 0x2A000 + 0x1C, nullptr); //dummy EoF stuff
             delete f;
+            
+            fil->course.unknown0 = 1;
+            fil->subcourse.unknown0 = 1;
+            if(fil->course.unknown2) fil->course.unknown2 = 0x010000;
+            if(fil->subcourse.unknown2) fil->subcourse.unknown2 = 0x010000;
             
             //memset(&fil->dummy_thumbnail, 0, 0x157C0);
             //u32* ptr = fil->dummy_padding;

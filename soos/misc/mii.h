@@ -14,4 +14,5 @@ typedef struct
     u8 copying;
     u8 padding_zero1[7];
     u16 authorname[10];
+    u32 something;
 } __attribute__((packed)) Mii;

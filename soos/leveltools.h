@@ -30,7 +30,8 @@ typedef struct
     u8 h;                     // 000B
     u32 flags;                // 000C
     u32 childflags;           // 0010
-    u32 NBT;                  // 0014
+    u16 something1;           // 0014
+    u16 something2;           // 0016
     u8 type;                  // 0018
     u8 child;                 // 0019
     u16 link;                 // 001A
@@ -50,19 +51,24 @@ typedef struct
     u8 f_day;                 // 0013
     u8 f_hour;                // 0014
     u8 f_minute;              // 0015
-    u16 padding_zero1;        // 0016
-    u32 padding_arr0[4];      // 0018
+    u16 unknown0;             // 0016
+    u32 padding_zero1;        // 0018
+    u32 unknown1;             // 001C
+    u64 unknown2;             // 0020 //BE: 01 00 00 00; LE: 00 00 01 00 WTF
     u16 lvlname[0x21];        // 0028
     u16 theme;                // 006A
     u8 padding_zero2;         // 006C
     u8 leveltype;             // 006D
-    u16 padding_zero3;        // 006E
+    u8 unknown3[2];           // 006E //mostly 00 00; one level has 01 01
     u16 lvltime;              // 0070
     u8 scroll;                // 0072
     u8 flags;                 // 0073
     u32 lvlsize;              // 0074
     Mii creator;              // 0078
-    u32 unknown0[6];          // 00D4
+    u32 unknown5;             // 00D8
+    u32 unknown6;             // 00DC
+    u64 unknown_ID;           // 00E0
+    u32 unknown7;             // 00E8
     u32 numtiles;             // 00EC
     MM_Tile tiles[2600];      // 00F0 //how fucking generous
     MM_Effect sfx[300];       //145F0 //again, so fucking generous ¬_¬
